@@ -16,7 +16,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Cola persistente con bloqueo transaccional y recuperación tras reinicios.
 - Historial y resultado de entrega por canal.
 - Aprobación automática o manual de solicitudes de ingreso.
-- Bienvenida global o diferente por canal antes de aprobar una solicitud.
+- Bienvenida diferente por canal antes de aprobar una solicitud.
 - Bienvenidas con texto enriquecido, foto, multimedia y un botón URL.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
@@ -24,6 +24,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Reintentos persistentes cuando una eliminación falla temporalmente.
 - Conteo de miembros, variación entre consultas, solicitudes y entregas.
 - Estado técnico mediante `/health` para administradores de plataforma.
+- Procesamiento silencioso de solicitudes, sin avisos privados a los administradores.
 - Docker Compose con PostgreSQL, Redis, migraciones, bot y worker separados.
 
 ## Requisitos
@@ -88,6 +89,8 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 ## Actualizar desde v0.1.x
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
+
+Si v0.2.0 ya está instalada, utiliza [`UPGRADE_V0.2.1.md`](UPGRADE_V0.2.1.md). Esta corrección no necesita una migración adicional.
 
 ## Cómo funciona la programación
 

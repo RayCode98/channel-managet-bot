@@ -189,24 +189,13 @@ def timing_menu(publication_id: uuid.UUID) -> InlineKeyboardMarkup:
     )
 
 
-def settings_menu(auto_approve: bool, welcome_enabled: bool) -> InlineKeyboardMarkup:
+def settings_menu(auto_approve: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text=f"Solicitudes automáticas: {'✅' if auto_approve else '❌'}",
                     callback_data="settings:auto_approve",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=f"Bienvenida: {'✅' if welcome_enabled else '❌'}",
-                    callback_data="settings:welcome_toggle",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✏️ Editar bienvenida", callback_data="settings:welcome_text"
                 )
             ],
             [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],

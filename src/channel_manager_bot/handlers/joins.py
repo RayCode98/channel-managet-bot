@@ -1,5 +1,4 @@
 import logging
-from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -53,15 +52,6 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
                 )
             except TelegramAPIError as exc:
                 logger.info("Could not send channel welcome: %s", exc)
-        elif workspace.welcome_enabled and workspace.welcome_text:
-            welcome = workspace.welcome_text.replace(
-                "{nombre}", escape(request.from_user.full_name)
-            ).replace("{canal}", escape(channel.title))
-            try:
-                await bot.send_message(request.user_chat_id, welcome)
-            except TelegramAPIError as exc:
-                logger.info("Could not send pre-approval welcome: %s", exc)
-
         if workspace.auto_approve:
             try:
                 await bot.approve_chat_join_request(request.chat.id, request.from_user.id)
@@ -71,40 +61,7 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
                 event.approved = False
             await session.commit()
             return
-
-        owner_ids = list(
-            await session.scalars(
-                select(Membership.user_id).where(
-                    Membership.workspace_id == workspace.id,
-                    Membership.role.in_([Role.owner, Role.admin]),
-                )
-            )
-        )
         await session.commit()
-
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Aprobar",
-                    callback_data=f"join:a:{request.chat.id}:{request.from_user.id}",
-                ),
-                InlineKeyboardButton(
-                    text="❌ Rechazar",
-                    callback_data=f"join:d:{request.chat.id}:{request.from_user.id}",
-                ),
-            ]
-        ]
-    )
-    for owner_id in owner_ids:
-        try:
-            await bot.send_message(
-                owner_id,
-                f"🙋 <b>Nueva solicitud</b>\n{escape(request.from_user.full_name)} desea entrar a <b>{escape(channel.title)}</b>.",
-                reply_markup=markup,
-            )
-        except TelegramAPIError as exc:
-            logger.info("Could not notify workspace administrator: %s", exc)
 
 
 async def user_can_manage(session, user_id: int, channel_id: int) -> bool:

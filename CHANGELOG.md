@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 0.2.1
+
+- Eliminada la configuración global de bienvenida de Automatizaciones.
+- Las bienvenidas se administran exclusivamente desde cada canal.
+- Eliminadas las notificaciones privadas sobre nuevas solicitudes de ingreso.
+- Las solicitudes siguen registrándose en estadísticas.
+- El autoaceptado continúa funcionando de forma silenciosa.
+
 ## 0.2.0
 
 - Bienvenida multimedia configurable por canal.

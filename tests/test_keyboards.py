@@ -1,6 +1,6 @@
 import uuid
 
-from channel_manager_bot.keyboards import publication_markup, ttl_label, ttl_menu
+from channel_manager_bot.keyboards import publication_markup, settings_menu, ttl_label, ttl_menu
 
 
 class Button:
@@ -36,3 +36,15 @@ def test_ttl_labels_and_callbacks():
     callbacks = [row[0].callback_data for row in markup.inline_keyboard]
     assert f"pub:setttl:{item_id}:0" in callbacks
     assert f"pub:setttl:{item_id}:10080" in callbacks
+
+
+def test_settings_menu_has_no_global_welcome_actions():
+    markup = settings_menu(auto_approve=True)
+    callbacks = [
+        button.callback_data
+        for row in markup.inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    assert "settings:auto_approve" in callbacks
+    assert not any("welcome" in callback for callback in callbacks)
