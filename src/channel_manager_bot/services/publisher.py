@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -118,6 +118,10 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 result.telegram_message_id = sent.message_id
                 result.succeeded = True
                 result.error = None
+                if publication.delete_after_minutes:
+                    result.delete_at = utcnow() + timedelta(
+                        minutes=publication.delete_after_minutes
+                    )
                 if existing is None:
                     session.add(result)
                 successes += 1
@@ -150,3 +154,44 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
             )
         except TelegramAPIError as exc:
             logger.info("Could not notify publication creator: %s", exc)
+
+
+async def delete_due_messages(bot: Bot, batch_size: int = 20) -> int:
+    async with SessionFactory() as session:
+        messages = list(
+            await session.scalars(
+                select(PublishedMessage)
+                .where(
+                    PublishedMessage.succeeded.is_(True),
+                    PublishedMessage.telegram_message_id.is_not(None),
+                    PublishedMessage.delete_at.is_not(None),
+                    PublishedMessage.delete_at <= utcnow(),
+                    PublishedMessage.deleted_at.is_(None),
+                    PublishedMessage.delete_attempts < 5,
+                )
+                .order_by(PublishedMessage.delete_at)
+                .limit(batch_size)
+            )
+        )
+        deleted = 0
+        for message in messages:
+            try:
+                await bot.delete_message(message.channel_id, message.telegram_message_id)
+                message.deleted_at = utcnow()
+                message.delete_error = None
+                deleted += 1
+            except TelegramBadRequest as exc:
+                if "message to delete not found" in str(exc).lower():
+                    message.deleted_at = utcnow()
+                    message.delete_error = None
+                    deleted += 1
+                else:
+                    message.delete_attempts += 1
+                    message.delete_error = str(exc)[:2000]
+                    message.delete_at = utcnow() + timedelta(minutes=10)
+            except TelegramAPIError as exc:
+                message.delete_attempts += 1
+                message.delete_error = str(exc)[:2000]
+                message.delete_at = utcnow() + timedelta(minutes=10)
+            await session.commit()
+        return deleted

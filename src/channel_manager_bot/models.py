@@ -87,6 +87,11 @@ class Channel(Base):
     can_post_messages: Mapped[bool] = mapped_column(Boolean, default=False)
     member_count: Mapped[int | None] = mapped_column(Integer)
     previous_member_count: Mapped[int | None] = mapped_column(Integer)
+    welcome_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    welcome_source_chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    welcome_source_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    welcome_button_text: Mapped[str | None] = mapped_column(String(64))
+    welcome_button_url: Mapped[str | None] = mapped_column(String(2048))
     added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -109,6 +114,7 @@ class Publication(Base):
     )
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_after_minutes: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -155,7 +161,44 @@ class PublishedMessage(Base):
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
     succeeded: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text)
+    delete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    delete_error: Mapped[str | None] = mapped_column(Text)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ContentTemplate(Base):
+    __tablename__ = "content_templates"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    creator_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    name: Mapped[str] = mapped_column(String(100))
+    source_chat_id: Mapped[int] = mapped_column(BigInteger)
+    source_message_id: Mapped[int] = mapped_column(BigInteger)
+    preview: Mapped[str | None] = mapped_column(String(500))
+    delete_after_minutes: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    buttons: Mapped[list["TemplateButton"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class TemplateButton(Base):
+    __tablename__ = "template_buttons"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content_templates.id", ondelete="CASCADE"), index=True
+    )
+    row_index: Mapped[int] = mapped_column(Integer, default=0)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(String(64))
+    url: Mapped[str] = mapped_column(String(2048))
 
 
 class JoinRequestEvent(Base):

@@ -55,7 +55,7 @@ No continúes si Frexo no aparece activo o si el disco está casi lleno.
 Desde PowerShell en tu computadora, cambia la ruta del archivo y la IP:
 
 ```powershell
-scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.1.1.zip" root@IP_DE_TU_VPS:/tmp/
+scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.2.0.zip" frexo@IP_DE_TU_VPS:/home/frexo/
 ```
 
 De regreso en el VPS, confirma primero que el destino no exista:
@@ -68,7 +68,7 @@ Si imprime `Destino disponible`, ejecuta:
 
 ```bash
 cd /opt
-unzip /tmp/telegram-channel-manager-v0.1.1.zip
+unzip /home/frexo/telegram-channel-manager-v0.2.0.zip
 mv /opt/telegram-channel-manager /opt/channel-manager
 cd /opt/channel-manager
 ```

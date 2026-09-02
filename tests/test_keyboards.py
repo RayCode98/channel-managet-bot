@@ -1,4 +1,6 @@
-from channel_manager_bot.keyboards import publication_markup
+import uuid
+
+from channel_manager_bot.keyboards import publication_markup, ttl_label, ttl_menu
 
 
 class Button:
@@ -24,3 +26,13 @@ def test_publication_markup_groups_and_orders_rows():
 
 def test_publication_markup_is_none_without_buttons():
     assert publication_markup([]) is None
+
+
+def test_ttl_labels_and_callbacks():
+    item_id = uuid.uuid4()
+    markup = ttl_menu("pub", item_id)
+    assert ttl_label(1440) == "24 horas"
+    assert ttl_label(None) == "No"
+    callbacks = [row[0].callback_data for row in markup.inline_keyboard]
+    assert f"pub:setttl:{item_id}:0" in callbacks
+    assert f"pub:setttl:{item_id}:10080" in callbacks

@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     def parse_admin_ids(cls, value):
         if value in (None, ""):
             return frozenset()
+        if isinstance(value, int):
+            return frozenset({value})
         if isinstance(value, str):
             return frozenset(int(item.strip()) for item in value.split(",") if item.strip())
         return frozenset(value)

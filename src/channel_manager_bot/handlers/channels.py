@@ -1,13 +1,15 @@
 import logging
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus, ChatType
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import CallbackQuery, ChatMemberUpdated
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
 from sqlalchemy import select
 
 from ..database import SessionFactory
-from ..keyboards import back_home, channels_menu
+from ..keyboards import back_home, channel_detail_menu, channels_menu
 from ..models import AuditLog, Channel, ChannelStatus, Membership
 from ..repository import (
     can_add_channel,
@@ -16,9 +18,23 @@ from ..repository import (
     get_workspace,
     utcnow,
 )
+from ..states import ChannelWelcomeFlow
 
 router = Router(name="channels")
 logger = logging.getLogger(__name__)
+
+
+async def owned_channel(session, channel_id: int, user_id: int) -> Channel | None:
+    workspace = await get_workspace(session, user_id)
+    if workspace is None:
+        return None
+    return await session.scalar(
+        select(Channel).where(
+            Channel.telegram_chat_id == channel_id,
+            Channel.workspace_id == workspace.id,
+            Channel.status == ChannelStatus.active,
+        )
+    )
 
 
 @router.callback_query(F.data == "channels:list")
@@ -33,11 +49,171 @@ async def list_channels(callback: CallbackQuery) -> None:
             count = (
                 f" · {channel.member_count:,} miembros" if channel.member_count is not None else ""
             )
-            lines.append(f"• <b>{channel.title}</b> ({handle}){count}")
+            lines.append(f"• <b>{escape(channel.title)}</b> ({handle}){count}")
         text = "\n".join(lines)
     else:
         text = "📢 <b>Canales conectados</b>\n\nTodavía no has agregado ningún canal."
-    await callback.message.edit_text(text, reply_markup=channels_menu())
+    await callback.message.edit_text(text, reply_markup=channels_menu(channels))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("channel:open:"))
+async def open_channel(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    button = channel.welcome_button_text or "Sin botón"
+    status = "Activa" if channel.welcome_enabled else "Desactivada"
+    await callback.message.edit_text(
+        f"⚙️ <b>{escape(channel.title)}</b>\n\n"
+        f"👋 <b>Bienvenida:</b> {status}\n"
+        f"🔗 <b>Botón:</b> {button}\n\n"
+        "La bienvenida se envía por privado cuando llega una solicitud de ingreso, antes de aprobarla.",
+        reply_markup=channel_detail_menu(channel),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("welcome:content:"))
+async def ask_channel_welcome(callback: CallbackQuery, state: FSMContext) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    await state.set_state(ChannelWelcomeFlow.waiting_content)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.answer(
+        f"👋 Envía la bienvenida para <b>{escape(channel.title)}</b>.\n\n"
+        "Puede ser texto enriquecido o una foto con texto. También se aceptan video, animación, audio o documento."
+    )
+    await callback.answer()
+
+
+@router.message(ChannelWelcomeFlow.waiting_content, F.chat.type == ChatType.PRIVATE)
+async def save_channel_welcome(message: Message, state: FSMContext) -> None:
+    if not any(
+        [
+            message.text,
+            message.photo,
+            message.video,
+            message.animation,
+            message.audio,
+            message.document,
+            message.voice,
+        ]
+    ):
+        await message.answer("Envía texto, una foto u otro archivo multimedia compatible.")
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
+        if channel is None:
+            await state.clear()
+            await message.answer("Canal no encontrado.")
+            return
+        channel.welcome_source_chat_id = message.chat.id
+        channel.welcome_source_message_id = message.message_id
+        channel.welcome_enabled = True
+        await session.commit()
+    await state.clear()
+    await message.answer(
+        "✅ Bienvenida guardada y activada. Puedes agregarle un botón desde este menú.",
+        reply_markup=channel_detail_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("welcome:button:"))
+async def ask_welcome_button(callback: CallbackQuery, state: FSMContext) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.welcome_source_message_id:
+        await callback.answer("Primero configura el contenido de bienvenida.", show_alert=True)
+        return
+    await state.set_state(ChannelWelcomeFlow.waiting_button_text)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.answer(
+        "Escribe el texto del botón de bienvenida (máximo 64 caracteres):"
+    )
+    await callback.answer()
+
+
+@router.message(ChannelWelcomeFlow.waiting_button_text, F.text)
+async def receive_welcome_button_text(message: Message, state: FSMContext) -> None:
+    text = message.text.strip()
+    if not 1 <= len(text) <= 64:
+        await message.answer("El texto debe tener entre 1 y 64 caracteres.")
+        return
+    await state.update_data(button_text=text)
+    await state.set_state(ChannelWelcomeFlow.waiting_button_url)
+    await message.answer("Envía el enlace completo del botón, por ejemplo: https://t.me/mi_canal")
+
+
+@router.message(ChannelWelcomeFlow.waiting_button_url, F.text)
+async def receive_welcome_button_url(message: Message, state: FSMContext) -> None:
+    url = message.text.strip()
+    if not url.startswith(("https://", "http://", "tg://")):
+        await message.answer("El enlace debe comenzar con https://, http:// o tg://")
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
+        if channel is None:
+            await state.clear()
+            await message.answer("Canal no encontrado.")
+            return
+        channel.welcome_button_text = data["button_text"]
+        channel.welcome_button_url = url
+        await session.commit()
+    await state.clear()
+    await message.answer(
+        "✅ Botón de bienvenida guardado.", reply_markup=channel_detail_menu(channel)
+    )
+
+
+@router.callback_query(F.data.startswith("welcome:toggle:"))
+async def toggle_channel_welcome(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+        if channel is None:
+            await callback.answer("Canal no encontrado.", show_alert=True)
+            return
+        if not channel.welcome_source_message_id:
+            await callback.answer("Primero configura el contenido de bienvenida.", show_alert=True)
+            return
+        channel.welcome_enabled = not channel.welcome_enabled
+        await session.commit()
+    await callback.message.edit_reply_markup(reply_markup=channel_detail_menu(channel))
+    await callback.answer("Bienvenida actualizada")
+
+
+@router.callback_query(F.data.startswith("welcome:clear:"))
+async def clear_channel_welcome(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+        if channel is None:
+            await callback.answer("Canal no encontrado.", show_alert=True)
+            return
+        channel.welcome_enabled = False
+        channel.welcome_source_chat_id = None
+        channel.welcome_source_message_id = None
+        channel.welcome_button_text = None
+        channel.welcome_button_url = None
+        await session.commit()
+    await callback.message.edit_text(
+        f"⚙️ <b>{escape(channel.title)}</b>\n\nLa bienvenida personalizada fue eliminada.",
+        reply_markup=channel_detail_menu(channel),
+    )
     await callback.answer()
 
 
@@ -117,12 +293,12 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
             await session.commit()
             if can_post:
                 await bot.send_message(
-                    actor.id, f"✅ <b>{existing.title}</b> quedó conectado correctamente."
+                    actor.id, f"✅ <b>{escape(existing.title)}</b> quedó conectado correctamente."
                 )
             else:
                 await bot.send_message(
                     actor.id,
-                    f"⚠️ <b>{existing.title}</b> necesita el permiso para publicar mensajes.",
+                    f"⚠️ <b>{escape(existing.title)}</b> necesita el permiso para publicar mensajes.",
                 )
             return
 
@@ -148,7 +324,7 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
             if owner_id:
                 try:
                     await bot.send_message(
-                        owner_id, f"🚨 El bot perdió acceso a <b>{existing.title}</b>."
+                        owner_id, f"🚨 El bot perdió acceso a <b>{escape(existing.title)}</b>."
                     )
                 except TelegramAPIError as exc:
                     logger.info("Could not notify channel owner: %s", exc)

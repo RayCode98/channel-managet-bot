@@ -27,7 +27,33 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
         )
         session.add(event)
 
-        if workspace.welcome_enabled and workspace.welcome_text:
+        if (
+            channel.welcome_enabled
+            and channel.welcome_source_chat_id
+            and channel.welcome_source_message_id
+        ):
+            welcome_markup = None
+            if channel.welcome_button_text and channel.welcome_button_url:
+                welcome_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=channel.welcome_button_text,
+                                url=channel.welcome_button_url,
+                            )
+                        ]
+                    ]
+                )
+            try:
+                await bot.copy_message(
+                    chat_id=request.user_chat_id,
+                    from_chat_id=channel.welcome_source_chat_id,
+                    message_id=channel.welcome_source_message_id,
+                    reply_markup=welcome_markup,
+                )
+            except TelegramAPIError as exc:
+                logger.info("Could not send channel welcome: %s", exc)
+        elif workspace.welcome_enabled and workspace.welcome_text:
             welcome = workspace.welcome_text.replace(
                 "{nombre}", escape(request.from_user.full_name)
             ).replace("{canal}", escape(channel.title))
@@ -74,7 +100,7 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
         try:
             await bot.send_message(
                 owner_id,
-                f"🙋 <b>Nueva solicitud</b>\n{request.from_user.full_name} desea entrar a <b>{channel.title}</b>.",
+                f"🙋 <b>Nueva solicitud</b>\n{escape(request.from_user.full_name)} desea entrar a <b>{escape(channel.title)}</b>.",
                 reply_markup=markup,
             )
         except TelegramAPIError as exc:

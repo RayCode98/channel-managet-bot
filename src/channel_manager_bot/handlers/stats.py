@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -31,9 +32,9 @@ async def show_stats(callback: CallbackQuery, bot: Bot) -> None:
                 total_members += current
                 change = current - previous if previous is not None else None
                 change_text = f" ({change:+d})" if change is not None else ""
-                lines.append(f"• <b>{channel.title}</b>: {current:,}{change_text}")
+                lines.append(f"• <b>{escape(channel.title)}</b>: {current:,}{change_text}")
             except TelegramAPIError:
-                lines.append(f"• <b>{channel.title}</b>: no disponible")
+                lines.append(f"• <b>{escape(channel.title)}</b>: no disponible")
 
         published = await session.scalar(
             select(func.count())

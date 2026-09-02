@@ -16,7 +16,12 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Cola persistente con bloqueo transaccional y recuperación tras reinicios.
 - Historial y resultado de entrega por canal.
 - Aprobación automática o manual de solicitudes de ingreso.
-- Bienvenida personalizable antes de aprobar una solicitud.
+- Bienvenida global o diferente por canal antes de aprobar una solicitud.
+- Bienvenidas con texto enriquecido, foto, multimedia y un botón URL.
+- Plan de contenido paginado y agrupado por fecha.
+- Plantillas reutilizables con contenido, botones y autoeliminación.
+- Autoeliminación de publicaciones entre 1 hora y 7 días.
+- Reintentos persistentes cuando una eliminación falla temporalmente.
 - Conteo de miembros, variación entre consultas, solicitudes y entregas.
 - Estado técnico mediante `/health` para administradores de plataforma.
 - Docker Compose con PostgreSQL, Redis, migraciones, bot y worker separados.
@@ -77,6 +82,12 @@ Para ampliar las funciones posteriormente:
 - Invitar usuarios, necesario para recibir y aprobar solicitudes.
 
 El permiso para agregar suscriptores permite que Telegram entregue al bot las solicitudes de ingreso y que este pueda aprobarlas o rechazarlas.
+
+El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminación programada en canales.
+
+## Actualizar desde v0.1.x
+
+Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
 ## Cómo funciona la programación
 

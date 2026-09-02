@@ -7,7 +7,12 @@ from aiogram.enums import ParseMode
 from redis.asyncio import Redis
 
 from .config import get_settings
-from .services.publisher import claim_next_publication, publish_claimed, recover_stale_jobs
+from .services.publisher import (
+    claim_next_publication,
+    delete_due_messages,
+    publish_claimed,
+    recover_stale_jobs,
+)
 
 
 async def main() -> None:
@@ -19,6 +24,7 @@ async def main() -> None:
     try:
         while True:
             await redis.set("worker:heartbeat", "ok", ex=15)
+            await delete_due_messages(bot)
             publication = await claim_next_publication()
             if publication:
                 await publish_claimed(bot, publication.id)

@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from html import escape
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram import F, Router
@@ -10,7 +11,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from ..database import SessionFactory
-from ..keyboards import back_home, channel_selector, composer_menu, main_menu, timing_menu
+from ..keyboards import (
+    back_home,
+    channel_selector,
+    composer_menu,
+    main_menu,
+    timing_menu,
+    ttl_label,
+    ttl_menu,
+)
 from ..models import (
     Channel,
     ChannelStatus,
@@ -147,8 +156,45 @@ async def receive_button_url(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ Botón agregado. Total: {button_count}.",
-        reply_markup=composer_menu(publication.id, button_count),
+        reply_markup=composer_menu(publication.id, button_count, publication.delete_after_minutes),
     )
+
+
+@router.callback_query(F.data.startswith("pub:ttl:"))
+async def choose_publication_ttl(callback: CallbackQuery) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "🗑 <b>Autoeliminación</b>\n\n"
+        "Elige cuánto tiempo permanecerá el mensaje en cada canal después de publicarse.",
+        reply_markup=ttl_menu("pub", publication.id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:setttl:"))
+async def set_publication_ttl(callback: CallbackQuery) -> None:
+    _, _, publication_id, minutes_text = callback.data.split(":", 3)
+    minutes = int(minutes_text)
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+        if publication is None or publication.status != PublicationStatus.draft:
+            await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+            return
+        publication.delete_after_minutes = minutes or None
+        await session.commit()
+    await callback.message.edit_text(
+        f"✅ Autoeliminación: <b>{ttl_label(publication.delete_after_minutes)}</b>.\n\n"
+        "Puedes seguir configurando la publicación.",
+        reply_markup=composer_menu(
+            publication.id, len(publication.buttons), publication.delete_after_minutes
+        ),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("pub:channels:"))
@@ -384,7 +430,7 @@ async def list_publications(callback: CallbackQuery) -> None:
             PublicationStatus.failed: "Fallida",
             PublicationStatus.cancelled: "Cancelada",
         }[item.status]
-        preview = (item.preview or "Multimedia").replace("\n", " ")[:55]
+        preview = escape((item.preview or "Multimedia").replace("\n", " ")[:55])
         lines.append(f"• <b>{label}</b> — {preview}")
     await callback.message.edit_text("\n".join(lines), reply_markup=back_home())
     await callback.answer()
