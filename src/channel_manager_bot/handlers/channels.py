@@ -10,13 +10,18 @@ from sqlalchemy import select
 
 from ..database import SessionFactory
 from ..keyboards import back_home, channel_detail_menu, channels_menu
-from ..models import AuditLog, Channel, ChannelStatus, Membership
+from ..models import AuditLog, Channel, ChannelStatus, Membership, WelcomeButton
 from ..repository import (
     can_add_channel,
     ensure_user_workspace,
     get_active_channels,
     get_workspace,
     utcnow,
+)
+from ..services.welcome import (
+    content_from_message,
+    parse_welcome_buttons,
+    send_channel_welcome,
 )
 from ..states import ChannelWelcomeFlow
 
@@ -65,12 +70,12 @@ async def open_channel(callback: CallbackQuery) -> None:
     if channel is None:
         await callback.answer("Canal no encontrado.", show_alert=True)
         return
-    button = channel.welcome_button_text or "Sin botón"
+    button_count = len(channel.welcome_buttons)
     status = "Activa" if channel.welcome_enabled else "Desactivada"
     await callback.message.edit_text(
         f"⚙️ <b>{escape(channel.title)}</b>\n\n"
         f"👋 <b>Bienvenida:</b> {status}\n"
-        f"🔗 <b>Botón:</b> {button}\n\n"
+        f"🔗 <b>Botones:</b> {button_count}\n\n"
         "La bienvenida se envía por privado cuando llega una solicitud de ingreso, antes de aprobarla.",
         reply_markup=channel_detail_menu(channel),
     )
@@ -89,7 +94,12 @@ async def ask_channel_welcome(callback: CallbackQuery, state: FSMContext) -> Non
     await state.update_data(channel_id=channel_id)
     await callback.message.answer(
         f"👋 Envía la bienvenida para <b>{escape(channel.title)}</b>.\n\n"
-        "Puede ser texto enriquecido o una foto con texto. También se aceptan video, animación, audio o documento."
+        "Puede ser texto enriquecido o una foto con texto. También se aceptan video, "
+        "animación, audio, voz o documento.\n\n"
+        "Puedes insertar estas variables en el texto:\n"
+        "• <code>{nombre}</code>: nombre de la persona que solicita entrar.\n"
+        "• <code>{canal}</code>: nombre de este canal.\n\n"
+        "Ejemplo: <code>Hola {nombre}, te damos la bienvenida a {canal}.</code>"
     )
     await callback.answer()
 
@@ -116,19 +126,23 @@ async def save_channel_welcome(message: Message, state: FSMContext) -> None:
             await state.clear()
             await message.answer("Canal no encontrado.")
             return
+        content_type, text_template, file_id = content_from_message(message)
         channel.welcome_source_chat_id = message.chat.id
         channel.welcome_source_message_id = message.message_id
+        channel.welcome_content_type = content_type
+        channel.welcome_text_template = text_template
+        channel.welcome_file_id = file_id
         channel.welcome_enabled = True
         await session.commit()
     await state.clear()
     await message.answer(
-        "✅ Bienvenida guardada y activada. Puedes agregarle un botón desde este menú.",
+        "✅ Bienvenida guardada y activada. Las variables se reemplazarán para cada persona.",
         reply_markup=channel_detail_menu(channel),
     )
 
 
-@router.callback_query(F.data.startswith("welcome:button:"))
-async def ask_welcome_button(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data.startswith("welcome:buttons:"))
+async def ask_welcome_buttons(callback: CallbackQuery, state: FSMContext) -> None:
     channel_id = int(callback.data.rsplit(":", 1)[1])
     async with SessionFactory() as session:
         channel = await owned_channel(session, channel_id, callback.from_user.id)
@@ -138,31 +152,33 @@ async def ask_welcome_button(callback: CallbackQuery, state: FSMContext) -> None
     if not channel.welcome_source_message_id:
         await callback.answer("Primero configura el contenido de bienvenida.", show_alert=True)
         return
-    await state.set_state(ChannelWelcomeFlow.waiting_button_text)
+    await state.set_state(ChannelWelcomeFlow.waiting_buttons)
     await state.update_data(channel_id=channel_id)
     await callback.message.answer(
-        "Escribe el texto del botón de bienvenida (máximo 64 caracteres):"
+        "🔗 Envía todos los botones en un solo mensaje, uno por línea, con este formato:\n\n"
+        "<code>nombre botón - url - color</code>\n\n"
+        "Ejemplo:\n"
+        "<code>Unirme ahora - https://t.me/mi_canal - verde\n"
+        "Ver reglas - https://example.com/reglas - azul\n"
+        "Más información - https://example.com/info - normal</code>\n\n"
+        "Colores disponibles: <b>azul, verde, rojo o normal</b>.\n"
+        "Cada salto de línea crea otro botón. Envía <code>quitar</code> para dejar la bienvenida sin botones."
     )
     await callback.answer()
 
 
-@router.message(ChannelWelcomeFlow.waiting_button_text, F.text)
-async def receive_welcome_button_text(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
-    if not 1 <= len(text) <= 64:
-        await message.answer("El texto debe tener entre 1 y 64 caracteres.")
-        return
-    await state.update_data(button_text=text)
-    await state.set_state(ChannelWelcomeFlow.waiting_button_url)
-    await message.answer("Envía el enlace completo del botón, por ejemplo: https://t.me/mi_canal")
+@router.message(ChannelWelcomeFlow.waiting_buttons, F.text)
+async def receive_welcome_buttons(message: Message, state: FSMContext) -> None:
+    remove_all = message.text.strip().lower() == "quitar"
+    if not remove_all:
+        try:
+            parsed_buttons = parse_welcome_buttons(message.text)
+        except ValueError as exc:
+            await message.answer(f"⚠️ {escape(str(exc))}")
+            return
+    else:
+        parsed_buttons = []
 
-
-@router.message(ChannelWelcomeFlow.waiting_button_url, F.text)
-async def receive_welcome_button_url(message: Message, state: FSMContext) -> None:
-    url = message.text.strip()
-    if not url.startswith(("https://", "http://", "tg://")):
-        await message.answer("El enlace debe comenzar con https://, http:// o tg://")
-        return
     data = await state.get_data()
     async with SessionFactory() as session:
         channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
@@ -170,13 +186,50 @@ async def receive_welcome_button_url(message: Message, state: FSMContext) -> Non
             await state.clear()
             await message.answer("Canal no encontrado.")
             return
-        channel.welcome_button_text = data["button_text"]
-        channel.welcome_button_url = url
+        channel.welcome_buttons.clear()
+        channel.welcome_button_text = None
+        channel.welcome_button_url = None
+        for row_index, button in enumerate(parsed_buttons):
+            channel.welcome_buttons.append(
+                WelcomeButton(
+                    row_index=row_index,
+                    position=0,
+                    text=button.text,
+                    url=button.url,
+                    style=button.style,
+                )
+            )
         await session.commit()
     await state.clear()
     await message.answer(
-        "✅ Botón de bienvenida guardado.", reply_markup=channel_detail_menu(channel)
+        f"✅ Botones actualizados: <b>{len(parsed_buttons)}</b>.",
+        reply_markup=channel_detail_menu(channel),
     )
+
+
+@router.callback_query(F.data.startswith("welcome:preview:"))
+async def preview_channel_welcome(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.welcome_source_message_id:
+        await callback.answer("Primero configura el contenido de bienvenida.", show_alert=True)
+        return
+    try:
+        await send_channel_welcome(
+            callback.bot,
+            chat_id=callback.from_user.id,
+            channel=channel,
+            user_name=callback.from_user.full_name,
+        )
+    except TelegramAPIError as exc:
+        logger.warning("Could not render welcome preview for %s: %s", channel_id, exc)
+        await callback.answer("Telegram no pudo generar la vista previa.", show_alert=True)
+        return
+    await callback.answer("Vista previa enviada")
 
 
 @router.callback_query(F.data.startswith("welcome:toggle:"))
@@ -207,8 +260,12 @@ async def clear_channel_welcome(callback: CallbackQuery) -> None:
         channel.welcome_enabled = False
         channel.welcome_source_chat_id = None
         channel.welcome_source_message_id = None
+        channel.welcome_content_type = None
+        channel.welcome_text_template = None
+        channel.welcome_file_id = None
         channel.welcome_button_text = None
         channel.welcome_button_url = None
+        channel.welcome_buttons.clear()
         await session.commit()
     await callback.message.edit_text(
         f"⚙️ <b>{escape(channel.title)}</b>\n\nLa bienvenida personalizada fue eliminada.",

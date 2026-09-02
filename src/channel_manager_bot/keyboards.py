@@ -70,10 +70,22 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔗 Configurar botón",
-                    callback_data=f"welcome:button:{channel.telegram_chat_id}",
+                    text="🔗 Configurar botones",
+                    callback_data=f"welcome:buttons:{channel.telegram_chat_id}",
                 )
             ],
+            *(
+                [
+                    [
+                        InlineKeyboardButton(
+                            text="👁 Vista previa",
+                            callback_data=f"welcome:preview:{channel.telegram_chat_id}",
+                        )
+                    ]
+                ]
+                if configured
+                else []
+            ),
             [
                 InlineKeyboardButton(
                     text=f"Bienvenida: {'✅' if channel.welcome_enabled else '❌'}",

@@ -1,5 +1,15 @@
 # Historial de cambios
 
+## 0.3.0
+
+- Bienvenidas con hasta 20 botones, uno por cada línea de configuración.
+- Formato de botón `nombre - url - color` con estilos azul, verde, rojo y normal.
+- Variables dinámicas `{nombre}` y `{canal}` con escape seguro para texto enriquecido.
+- Vista previa por canal usando el mismo renderizador que el envío real.
+- Conservación automática del botón único creado con v0.2.x.
+- Dependencia mínima aiogram 3.25 para compatibilidad con estilos de Telegram Bot API 9.4.
+- Migración incremental `20260902_0003` sin eliminar datos anteriores.
+
 ## 0.2.1
 
 - Eliminada la configuración global de bienvenida de Automatizaciones.

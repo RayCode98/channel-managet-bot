@@ -11,8 +11,7 @@ class PublicationFlow(StatesGroup):
 
 class ChannelWelcomeFlow(StatesGroup):
     waiting_content = State()
-    waiting_button_text = State()
-    waiting_button_url = State()
+    waiting_buttons = State()
 
 
 class TemplateFlow(StatesGroup):

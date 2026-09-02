@@ -17,7 +17,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Historial y resultado de entrega por canal.
 - Aprobación automática o manual de solicitudes de ingreso.
 - Bienvenida diferente por canal antes de aprobar una solicitud.
-- Bienvenidas con texto enriquecido, foto, multimedia y un botón URL.
+- Bienvenidas con texto enriquecido, foto, multimedia y hasta 20 botones URL.
+- Personalización de bienvenidas con `{nombre}` y `{canal}`, colores y vista previa.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
 - Autoeliminación de publicaciones entre 1 hora y 7 días.
@@ -90,7 +91,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si v0.2.0 ya está instalada, utiliza [`UPGRADE_V0.2.1.md`](UPGRADE_V0.2.1.md). Esta corrección no necesita una migración adicional.
+Si ya utilizas v0.2.x, sigue [`UPGRADE_V0.3.0.md`](UPGRADE_V0.3.0.md). La migración `20260902_0003` conserva las bienvenidas y los botones anteriores.
 
 ## Cómo funciona la programación
 
@@ -99,6 +100,8 @@ El bot guarda la publicación original, los canales elegidos, los botones y la f
 ## Bienvenidas y limitación de Telegram
 
 La bienvenida privada se intenta enviar usando el identificador temporal incluido en una solicitud de ingreso y antes de aprobarla. No es posible escribir arbitrariamente a todos los suscriptores que entran directamente a un canal ni a usuarios que nunca han abierto el bot.
+
+Al configurar el contenido puedes usar `{nombre}` para el nombre del solicitante y `{canal}` para el nombre del canal. Los botones se envían en un solo mensaje, uno por línea, con `nombre - url - color`. Los colores admitidos son `azul`, `verde`, `rojo` y `normal`.
 
 ## Seguridad aplicada
 

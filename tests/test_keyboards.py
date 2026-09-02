@@ -1,6 +1,13 @@
 import uuid
 
-from channel_manager_bot.keyboards import publication_markup, settings_menu, ttl_label, ttl_menu
+from channel_manager_bot.keyboards import (
+    channel_detail_menu,
+    publication_markup,
+    settings_menu,
+    ttl_label,
+    ttl_menu,
+)
+from channel_manager_bot.models import Channel
 
 
 class Button:
@@ -48,3 +55,18 @@ def test_settings_menu_has_no_global_welcome_actions():
     ]
     assert "settings:auto_approve" in callbacks
     assert not any("welcome" in callback for callback in callbacks)
+
+
+def test_configured_channel_has_buttons_and_preview_actions():
+    channel = Channel(
+        telegram_chat_id=-1001234567890,
+        title="Canal",
+        welcome_enabled=True,
+        welcome_source_message_id=10,
+    )
+
+    markup = channel_detail_menu(channel)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert "welcome:buttons:-1001234567890" in callbacks
+    assert "welcome:preview:-1001234567890" in callbacks

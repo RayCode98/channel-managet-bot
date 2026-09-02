@@ -2,11 +2,12 @@ import logging
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import CallbackQuery, ChatJoinRequest, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery, ChatJoinRequest
 from sqlalchemy import select
 
 from ..database import SessionFactory
 from ..models import Channel, ChannelStatus, JoinRequestEvent, Membership, Role, Workspace
+from ..services.welcome import send_channel_welcome
 
 router = Router(name="joins")
 logger = logging.getLogger(__name__)
@@ -31,24 +32,12 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
             and channel.welcome_source_chat_id
             and channel.welcome_source_message_id
         ):
-            welcome_markup = None
-            if channel.welcome_button_text and channel.welcome_button_url:
-                welcome_markup = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=channel.welcome_button_text,
-                                url=channel.welcome_button_url,
-                            )
-                        ]
-                    ]
-                )
             try:
-                await bot.copy_message(
+                await send_channel_welcome(
+                    bot,
                     chat_id=request.user_chat_id,
-                    from_chat_id=channel.welcome_source_chat_id,
-                    message_id=channel.welcome_source_message_id,
-                    reply_markup=welcome_markup,
+                    channel=channel,
+                    user_name=request.from_user.full_name,
                 )
             except TelegramAPIError as exc:
                 logger.info("Could not send channel welcome: %s", exc)
