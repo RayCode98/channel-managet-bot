@@ -19,6 +19,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Bienvenida diferente por canal antes de aprobar una solicitud.
 - Bienvenidas con texto enriquecido, foto, multimedia y hasta 20 botones URL.
 - Personalización de bienvenidas con `{nombre}` y `{canal}`, colores y vista previa.
+- Despedida diferente por canal con texto enriquecido, multimedia y hasta 20 botones.
+- Personalización de despedidas con `{nombre}` y `{canal}`, activación y vista previa.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
 - Vista previa exacta de plantillas antes de utilizarlas.
@@ -95,7 +97,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si ya utilizas v0.2.x o v0.3.x, sigue [`UPGRADE_V0.4.0.md`](UPGRADE_V0.4.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Si ya utilizas v0.2.x, v0.3.x o v0.4.x, sigue [`UPGRADE_V0.5.0.md`](UPGRADE_V0.5.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Cómo funciona la programación
 
@@ -108,6 +110,16 @@ En una recurrencia solamente se conserva la siguiente ejecución futura. Cuando 
 La bienvenida privada se intenta enviar usando el identificador temporal incluido en una solicitud de ingreso y antes de aprobarla. No es posible escribir arbitrariamente a todos los suscriptores que entran directamente a un canal ni a usuarios que nunca han abierto el bot.
 
 Al configurar el contenido puedes usar `{nombre}` para el nombre del solicitante y `{canal}` para el nombre del canal. Los botones se envían en un solo mensaje, uno por línea, con `nombre - url - color`. Los colores admitidos son `azul`, `verde`, `rojo` y `normal`.
+
+## Despedidas y limitación de Telegram
+
+Cada canal tiene su propia despedida en **Mis canales → canal → Despedida**. Admite el mismo contenido, variables, botones y colores que una bienvenida, además de vista previa, activación y eliminación individual de botones.
+
+El bot reacciona únicamente cuando Telegram informa que la propia persona abandonó voluntariamente el canal. No envía despedidas por expulsiones. El mensaje privado es de mejor esfuerzo: solo llegará si esa persona ya abrió el bot y todavía permite que le escriba. Los fallos se registran silenciosamente y nunca generan una notificación al administrador.
+
+## Autocompletado propuesto
+
+La propuesta funcional, experiencia dentro de Telegram, fases, límites de uso y modelo de datos se encuentran en [`AUTOCOMPLETADO_PROPUESTA.md`](AUTOCOMPLETADO_PROPUESTA.md). Se recomienda comenzar con perfiles de contenido y bloques automáticos sin costo por generación; la IA se agregaría como módulo opcional después de definir proveedor, privacidad y plan comercial.
 
 ## Seguridad aplicada
 

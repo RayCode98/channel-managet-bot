@@ -3,6 +3,7 @@ import uuid
 from channel_manager_bot.keyboards import (
     channel_detail_menu,
     composer_menu,
+    farewell_menu,
     publication_markup,
     recurrence_interval_menu,
     recurrence_label,
@@ -12,7 +13,7 @@ from channel_manager_bot.keyboards import (
     ttl_label,
     ttl_menu,
 )
-from channel_manager_bot.models import Channel, WelcomeButton
+from channel_manager_bot.models import Channel, FarewellButton, WelcomeButton
 
 
 class Button:
@@ -86,6 +87,34 @@ def test_configured_channel_has_buttons_and_preview_actions():
     assert "welcome:buttons:-1001234567890" in callbacks
     assert "welcome:manage:-1001234567890" in callbacks
     assert "welcome:preview:-1001234567890" in callbacks
+    assert "farewell:menu:-1001234567890" in callbacks
+
+
+def test_configured_farewell_has_preview_and_button_management():
+    channel = Channel(
+        telegram_chat_id=-1001234567890,
+        title="Canal",
+        farewell_enabled=True,
+        farewell_source_message_id=20,
+    )
+    channel.farewell_buttons.append(
+        FarewellButton(
+            id=2,
+            channel_id=channel.telegram_chat_id,
+            row_index=0,
+            position=0,
+            text="Volver",
+            url="https://example.com",
+        )
+    )
+
+    callbacks = [
+        button.callback_data for row in farewell_menu(channel).inline_keyboard for button in row
+    ]
+
+    assert "farewell:manage:-1001234567890" in callbacks
+    assert "farewell:preview:-1001234567890" in callbacks
+    assert "farewell:toggle:-1001234567890" in callbacks
 
 
 def test_publication_and_template_menus_offer_button_management():

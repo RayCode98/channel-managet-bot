@@ -4,7 +4,7 @@ from collections import defaultdict
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from .models import Channel, PublicationButton, TemplateButton, WelcomeButton
+from .models import Channel, FarewellButton, PublicationButton, TemplateButton, WelcomeButton
 
 
 def ttl_label(minutes: int | None) -> str:
@@ -124,6 +124,12 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
                 if configured
                 else []
             ),
+            [
+                InlineKeyboardButton(
+                    text=f"🚪 Despedida: {'✅' if channel.farewell_enabled else '❌'}",
+                    callback_data=f"farewell:menu:{channel.telegram_chat_id}",
+                )
+            ],
             [InlineKeyboardButton(text="⬅️ Mis canales", callback_data="channels:list")],
         ]
     )
@@ -140,6 +146,87 @@ def welcome_buttons_menu(channel_id: int, buttons: list[WelcomeButton]) -> Inlin
     ]
     rows.append(
         [InlineKeyboardButton(text="⬅️ Volver al canal", callback_data=f"channel:open:{channel_id}")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def farewell_menu(channel: Channel) -> InlineKeyboardMarkup:
+    configured = bool(channel.farewell_source_message_id)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🖼 Configurar despedida",
+                callback_data=f"farewell:content:{channel.telegram_chat_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔗 Configurar botones",
+                callback_data=f"farewell:buttons:{channel.telegram_chat_id}",
+            )
+        ],
+    ]
+    if channel.farewell_buttons:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧹 Administrar botones",
+                    callback_data=f"farewell:manage:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    if configured:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="👁 Vista previa",
+                    callback_data=f"farewell:preview:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"Despedida: {'✅' if channel.farewell_enabled else '❌'}",
+                callback_data=f"farewell:toggle:{channel.telegram_chat_id}",
+            )
+        ]
+    )
+    if configured:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Borrar despedida",
+                    callback_data=f"farewell:clear:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver al canal",
+                callback_data=f"channel:open:{channel.telegram_chat_id}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def farewell_buttons_menu(channel_id: int, buttons: list[FarewellButton]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 {button.text}"[:64], callback_data=f"farewell:bdel:{button.id}"
+            )
+        ]
+        for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver a despedida", callback_data=f"farewell:menu:{channel_id}"
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

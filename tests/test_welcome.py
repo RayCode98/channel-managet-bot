@@ -5,6 +5,7 @@ import pytest
 from channel_manager_bot.services.welcome import (
     parse_welcome_buttons,
     render_welcome_text,
+    send_channel_farewell,
     send_channel_welcome,
     welcome_markup,
 )
@@ -103,3 +104,33 @@ async def test_send_welcome_renders_same_content_for_text_and_media(
     assert rendered == "Hola <b>Ana &lt;Admin&gt;</b> en Canal &amp; Noticias"
     if content_type == "photo":
         assert bot.arguments["photo"] == "photo-file-id"
+
+
+async def test_send_farewell_uses_channel_content_variables_and_buttons():
+    bot = FakeBot()
+    channel = SimpleNamespace(
+        title="Noticias Premium",
+        farewell_content_type="text",
+        farewell_text_template="Hasta pronto, <b>{nombre}</b>. Saliste de {canal}.",
+        farewell_file_id=None,
+        farewell_buttons=[
+            SimpleNamespace(
+                text="Volver",
+                url="https://t.me/noticias",
+                style="success",
+                row_index=0,
+                position=0,
+            )
+        ],
+        farewell_source_chat_id=1,
+        farewell_source_message_id=2,
+    )
+
+    await send_channel_farewell(bot, 456, channel, "Ana & Luis")
+
+    assert bot.method == "send_message"
+    assert bot.arguments["chat_id"] == 456
+    assert bot.arguments["text"] == (
+        "Hasta pronto, <b>Ana &amp; Luis</b>. Saliste de Noticias Premium."
+    )
+    assert bot.arguments["reply_markup"].inline_keyboard[0][0].text == "Volver"

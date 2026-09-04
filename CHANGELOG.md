@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.5.0
+
+- Despedida independiente para cada canal desde su propia configuración.
+- Contenido de despedida con texto enriquecido, foto, video, animación, audio, voz o documento.
+- Variables dinámicas `{nombre}` y `{canal}` con escape seguro.
+- Hasta 20 botones por despedida mediante `nombre - url - color`.
+- Vista previa, activación, borrado y eliminación individual de botones.
+- Detección exclusiva de salidas voluntarias; las expulsiones no disparan mensajes.
+- Fallos de envío privado procesados silenciosamente, sin avisos a administradores.
+- Suscripción explícita a actualizaciones `chat_member` mediante el dispatcher.
+- Propuesta funcional y técnica para Autocompletado de publicaciones.
+- Migración incremental `20260904_0005` compatible con instalaciones anteriores.
+
 ## 0.4.0
 
 - Vista previa exacta de plantillas con contenido, multimedia y botones.

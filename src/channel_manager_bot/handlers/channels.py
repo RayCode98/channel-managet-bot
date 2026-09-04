@@ -72,11 +72,14 @@ async def open_channel(callback: CallbackQuery) -> None:
         return
     button_count = len(channel.welcome_buttons)
     status = "Activa" if channel.welcome_enabled else "Desactivada"
+    farewell_status = "Activa" if channel.farewell_enabled else "Desactivada"
     await callback.message.edit_text(
         f"⚙️ <b>{escape(channel.title)}</b>\n\n"
         f"👋 <b>Bienvenida:</b> {status}\n"
         f"🔗 <b>Botones:</b> {button_count}\n\n"
-        "La bienvenida se envía por privado cuando llega una solicitud de ingreso, antes de aprobarla.",
+        f"🚪 <b>Despedida:</b> {farewell_status}\n\n"
+        "La bienvenida se envía al solicitar el ingreso. La despedida se intenta enviar cuando "
+        "Telegram informa que un suscriptor abandonó el canal.",
         reply_markup=channel_detail_menu(channel),
     )
     await callback.answer()

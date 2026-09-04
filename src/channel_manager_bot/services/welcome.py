@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from html import escape
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.enums import ChatMemberStatus
+from aiogram.types import ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from ..models import Channel, WelcomeButton
+from ..models import Channel, FarewellButton, WelcomeButton
 
 MAX_WELCOME_BUTTONS = 20
 
@@ -27,6 +28,17 @@ class ParsedWelcomeButton:
     text: str
     url: str
     style: str | None
+
+
+def is_voluntary_channel_departure(event: ChatMemberUpdated) -> bool:
+    """Return true only when a real user leaves the channel by their own action."""
+    departed_user = event.new_chat_member.user
+    return bool(
+        event.new_chat_member.status == ChatMemberStatus.LEFT
+        and event.old_chat_member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
+        and event.from_user.id == departed_user.id
+        and not departed_user.is_bot
+    )
 
 
 def parse_welcome_buttons(value: str) -> list[ParsedWelcomeButton]:
@@ -66,7 +78,9 @@ def render_welcome_text(template: str | None, user_name: str, channel_name: str)
     return text.replace("{nombre}", escape(user_name)).replace("{canal}", escape(channel_name))
 
 
-def welcome_markup(buttons: list[WelcomeButton]) -> InlineKeyboardMarkup | None:
+def welcome_markup(
+    buttons: list[WelcomeButton] | list[FarewellButton],
+) -> InlineKeyboardMarkup | None:
     if not buttons:
         return None
     rows = [
@@ -92,7 +106,48 @@ def content_from_message(message: Message) -> tuple[str, str, str | None]:
         media = getattr(message, content_type)
         if media:
             return content_type, text, media.file_id
-    raise ValueError("Tipo de contenido de bienvenida no compatible.")
+    raise ValueError("Tipo de contenido multimedia no compatible.")
+
+
+async def send_configured_channel_message(
+    bot: Bot,
+    chat_id: int,
+    channel_name: str,
+    user_name: str,
+    content_type: str | None,
+    text_template: str | None,
+    file_id: str | None,
+    buttons: list[WelcomeButton] | list[FarewellButton],
+    source_chat_id: int | None = None,
+    source_message_id: int | None = None,
+) -> None:
+    markup = welcome_markup(buttons)
+    if content_type:
+        text = render_welcome_text(
+            text_template,
+            user_name=user_name,
+            channel_name=channel_name,
+        )
+        if content_type == "text":
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+            return
+
+        method = getattr(bot, f"send_{content_type}")
+        await method(
+            chat_id=chat_id,
+            **{content_type: file_id},
+            caption=text or None,
+            reply_markup=markup,
+        )
+        return
+
+    if source_chat_id and source_message_id:
+        await bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=source_chat_id,
+            message_id=source_message_id,
+            reply_markup=markup,
+        )
 
 
 async def send_channel_welcome(
@@ -101,31 +156,35 @@ async def send_channel_welcome(
     channel: Channel,
     user_name: str,
 ) -> None:
-    markup = welcome_markup(channel.welcome_buttons)
-    if channel.welcome_content_type:
-        text = render_welcome_text(
-            channel.welcome_text_template,
-            user_name=user_name,
-            channel_name=channel.title,
-        )
-        if channel.welcome_content_type == "text":
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-            return
+    await send_configured_channel_message(
+        bot=bot,
+        chat_id=chat_id,
+        channel_name=channel.title,
+        user_name=user_name,
+        content_type=channel.welcome_content_type,
+        text_template=channel.welcome_text_template,
+        file_id=channel.welcome_file_id,
+        buttons=channel.welcome_buttons,
+        source_chat_id=channel.welcome_source_chat_id,
+        source_message_id=channel.welcome_source_message_id,
+    )
 
-        method = getattr(bot, f"send_{channel.welcome_content_type}")
-        await method(
-            chat_id=chat_id,
-            **{channel.welcome_content_type: channel.welcome_file_id},
-            caption=text or None,
-            reply_markup=markup,
-        )
-        return
 
-    # Compatibilidad con bienvenidas guardadas antes de v0.3.0.
-    if channel.welcome_source_chat_id and channel.welcome_source_message_id:
-        await bot.copy_message(
-            chat_id=chat_id,
-            from_chat_id=channel.welcome_source_chat_id,
-            message_id=channel.welcome_source_message_id,
-            reply_markup=markup,
-        )
+async def send_channel_farewell(
+    bot: Bot,
+    chat_id: int,
+    channel: Channel,
+    user_name: str,
+) -> None:
+    await send_configured_channel_message(
+        bot=bot,
+        chat_id=chat_id,
+        channel_name=channel.title,
+        user_name=user_name,
+        content_type=channel.farewell_content_type,
+        text_template=channel.farewell_text_template,
+        file_id=channel.farewell_file_id,
+        buttons=channel.farewell_buttons,
+        source_chat_id=channel.farewell_source_chat_id,
+        source_message_id=channel.farewell_source_message_id,
+    )

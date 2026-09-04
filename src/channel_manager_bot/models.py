@@ -96,16 +96,38 @@ class Channel(Base):
     welcome_file_id: Mapped[str | None] = mapped_column(String(512))
     welcome_button_text: Mapped[str | None] = mapped_column(String(64))
     welcome_button_url: Mapped[str | None] = mapped_column(String(2048))
+    farewell_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    farewell_source_chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    farewell_source_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    farewell_content_type: Mapped[str | None] = mapped_column(String(20))
+    farewell_text_template: Mapped[str | None] = mapped_column(Text)
+    farewell_file_id: Mapped[str | None] = mapped_column(String(512))
     added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     welcome_buttons: Mapped[list["WelcomeButton"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
     )
+    farewell_buttons: Mapped[list["FarewellButton"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class WelcomeButton(Base):
     __tablename__ = "welcome_buttons"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    row_index: Mapped[int] = mapped_column(Integer, default=0)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(String(64))
+    url: Mapped[str] = mapped_column(String(2048))
+    style: Mapped[str | None] = mapped_column(String(16))
+
+
+class FarewellButton(Base):
+    __tablename__ = "farewell_buttons"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     channel_id: Mapped[int] = mapped_column(
         ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
