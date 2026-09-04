@@ -4,7 +4,16 @@ from collections import defaultdict
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from .models import Channel, FarewellButton, PublicationButton, TemplateButton, WelcomeButton
+from .models import (
+    Channel,
+    FarewellButton,
+    JoinRequirement,
+    PublicationButton,
+    RequirementChat,
+    TemplateButton,
+    WelcomeButton,
+)
+from .services.join_filters import SCRIPT_OPTIONS
 
 
 def ttl_label(minutes: int | None) -> str:
@@ -36,11 +45,12 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="🚪 Despedidas", callback_data="feature:channels:farewell")
     builder.button(text="🪄 Autocompletado", callback_data="feature:channels:auto")
     builder.button(text="✍️ Firmas", callback_data="feature:channels:signature")
+    builder.button(text="🛡 Filtros de unión", callback_data="feature:channels:joinfilter")
     builder.button(text="📚 Historial", callback_data="pub:list")
     builder.button(text="📢 Mis canales", callback_data="channels:list")
     builder.button(text="📊 Estadísticas", callback_data="stats:show")
     builder.button(text="⚙️ Automatizaciones", callback_data="settings:show")
-    builder.adjust(1, 2, 2, 2, 2, 1, 1)
+    builder.adjust(1, 2, 2, 2, 2, 2, 1)
     return builder.as_markup()
 
 
@@ -90,6 +100,8 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
             return f"welcome:menu:{channel.telegram_chat_id}"
         if kind == "farewell":
             return f"farewell:menu:{channel.telegram_chat_id}"
+        if kind == "joinfilter":
+            return f"jfilter:menu:{channel.telegram_chat_id}"
         return f"posttext:menu:{kind}:{channel.telegram_chat_id}"
 
     def enabled(channel: Channel) -> bool:
@@ -98,6 +110,10 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
             "farewell": channel.farewell_enabled,
             "auto": channel.autocomplete_enabled,
             "signature": channel.signature_enabled,
+            "joinfilter": bool(
+                channel.join_name_filter_enabled
+                or (channel.join_requirement and channel.join_requirement.enabled)
+            ),
         }[kind]
 
     rows = [
@@ -111,6 +127,160 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
     ]
     rows.append([InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def join_filter_menu(channel: Channel) -> InlineKeyboardMarkup:
+    requirement_enabled = bool(channel.join_requirement and channel.join_requirement.enabled)
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=(
+                        "🔤 Filtro de escritura: "
+                        f"{'✅' if channel.join_name_filter_enabled else '❌'}"
+                    ),
+                    callback_data=f"jfilter:alpha:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"🔗 Forzar unión: {'✅' if requirement_enabled else '❌'}",
+                    callback_data=f"jfilter:force:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Canales con filtros",
+                    callback_data="feature:channels:joinfilter",
+                )
+            ],
+        ]
+    )
+
+
+def alphabet_filter_menu(
+    channel_id: int, selected_scripts: set[str], enabled: bool
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    current_row: list[InlineKeyboardButton] = []
+    for code, label in SCRIPT_OPTIONS:
+        current_row.append(
+            InlineKeyboardButton(
+                text=f"{'✅' if code in selected_scripts else '▫️'} {label}"[:64],
+                callback_data=f"jfilter:script:{code}:{channel_id}",
+            )
+        )
+        if len(current_row) == 2:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=f"Filtro: {'✅ Activo' if enabled else '❌ Desactivado'}",
+                    callback_data=f"jfilter:atoggle:{channel_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Filtros del canal", callback_data=f"jfilter:menu:{channel_id}"
+                )
+            ],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def force_join_menu(channel_id: int, requirement: JoinRequirement | None) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🎯 Elegir canal o grupo requerido",
+                callback_data=f"jfilter:targets:{channel_id}",
+            )
+        ]
+    ]
+    if requirement is not None:
+        rows.extend(
+            [
+                [
+                    InlineKeyboardButton(
+                        text=f"Forzar unión: {'✅ Activo' if requirement.enabled else '❌ Desactivado'}",
+                        callback_data=f"jfilter:ftoggle:{channel_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🗑 Quitar requisito",
+                        callback_data=f"jfilter:fclear:{channel_id}",
+                    )
+                ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Filtros del canal", callback_data=f"jfilter:menu:{channel_id}"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def force_target_menu(
+    source_channel_id: int,
+    channels: list[Channel],
+    groups: list[RequirementChat],
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"📢 {channel.title}"[:64],
+                callback_data=(f"jfilter:target:c:{channel.telegram_chat_id}:{source_channel_id}"),
+            )
+        ]
+        for channel in channels
+        if channel.telegram_chat_id != source_channel_id
+    ]
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=f"👥 {group.title}"[:64],
+                    callback_data=(
+                        f"jfilter:target:g:{group.telegram_chat_id}:{source_channel_id}"
+                    ),
+                )
+            ]
+            for group in groups
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Forzar unión", callback_data=f"jfilter:force:{source_channel_id}"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def join_verification_menu(
+    invite_url: str, source_channel_id: int, user_id: int
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔗 Unirme al canal o grupo", url=invite_url)],
+            [
+                InlineKeyboardButton(
+                    text="✅ Ya me uní, verificar",
+                    callback_data=f"joinverify:{source_channel_id}:{user_id}",
+                )
+            ],
+        ]
+    )
 
 
 def welcome_menu(channel: Channel) -> InlineKeyboardMarkup:

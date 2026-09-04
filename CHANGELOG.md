@@ -1,5 +1,24 @@
 # Historial de cambios
 
+## 0.8.0
+
+- Nueva sección principal **Filtros de unión**, organizada como función → canal → opciones.
+- Filtro de nombres por 24 sistemas de escritura Unicode populares.
+- Explicación visible de que la escritura no determina nacionalidad, idioma ni ubicación.
+- Detección de nombres mixtos; basta una letra coincidente para activar el bloqueo.
+- Bloqueo permanente del solicitante y rechazo de la solicitud cuando coincide un filtro activo.
+- Rechazo como respaldo si Telegram impide efectuar el bloqueo por permisos insuficientes.
+- Nueva función **Forzar unión** con un canal o grupo requerido por cada canal protegido.
+- Registro automático de grupos cuando el bot es promovido a administrador.
+- Enlace público automático o enlace privado creado por el bot para el destino requerido.
+- Mensaje privado al solicitante con botones **Unirme** y **Ya me uní, verificar**.
+- Aprobación automática únicamente después de confirmar la membresía requerida.
+- Prioridad de filtros sobre el autoaceptado global y sobre el envío de la bienvenida.
+- Procesamiento silencioso, sin nuevas notificaciones de solicitudes para administradores.
+- Registro del resultado de cada solicitud para futuras estadísticas y auditoría.
+- Sincronización de permisos para invitar y restringir miembros.
+- Migración incremental `20260904_0007`, compatible con instalaciones anteriores.
+
 ## 0.7.0
 
 - Sincronización automática de todos los canales al iniciar el worker y cada seis horas.

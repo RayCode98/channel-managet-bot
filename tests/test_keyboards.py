@@ -1,11 +1,13 @@
 import uuid
 
 from channel_manager_bot.keyboards import (
+    alphabet_filter_menu,
     channel_detail_menu,
     channel_post_text_menu,
     composer_menu,
     farewell_menu,
     feature_channels_menu,
+    join_verification_menu,
     main_menu,
     publication_markup,
     recurrence_interval_menu,
@@ -99,6 +101,7 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "feature:channels:farewell" in main_callbacks
     assert "feature:channels:auto" in main_callbacks
     assert "feature:channels:signature" in main_callbacks
+    assert "feature:channels:joinfilter" in main_callbacks
     assert channel_callbacks == ["channel:refresh:-1001234567890", "channels:list"]
     assert "welcome:buttons:-1001234567890" in welcome_callbacks
     assert "welcome:manage:-1001234567890" in welcome_callbacks
@@ -117,6 +120,40 @@ def test_feature_channel_list_routes_directly_to_selected_configuration():
 
     assert button.text == "✅ Canal"
     assert button.callback_data == "farewell:menu:-1001234567890"
+
+
+def test_join_filter_channel_list_and_alphabet_callbacks_are_valid():
+    channel = Channel(
+        telegram_chat_id=-1001234567890,
+        title="Canal protegido",
+        join_name_filter_enabled=True,
+    )
+    channel_button = feature_channels_menu([channel], "joinfilter").inline_keyboard[0][0]
+    alphabet = alphabet_filter_menu(channel.telegram_chat_id, {"arab", "deva"}, True)
+    callbacks = [
+        button.callback_data
+        for row in alphabet.inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+
+    assert channel_button.text == "✅ Canal protegido"
+    assert channel_button.callback_data == "jfilter:menu:-1001234567890"
+    assert "jfilter:script:arab:-1001234567890" in callbacks
+    assert "jfilter:script:deva:-1001234567890" in callbacks
+    assert "jfilter:atoggle:-1001234567890" in callbacks
+    assert all(len(callback.encode()) <= 64 for callback in callbacks)
+
+
+def test_join_verification_callback_belongs_to_requester():
+    markup = join_verification_menu(
+        "https://t.me/destino",
+        -1001234567890,
+        987654321,
+    )
+
+    assert markup.inline_keyboard[0][0].url == "https://t.me/destino"
+    assert markup.inline_keyboard[1][0].callback_data == ("joinverify:-1001234567890:987654321")
 
 
 def test_configured_farewell_has_preview_and_button_management():

@@ -11,7 +11,7 @@ Las configuraciones ya no están amontonadas dentro del detalle general de un ca
 
 Al abrir una función, el bot muestra los canales activos del cliente. `✅` indica que esa función está activa en el canal y `❌` que está desactivada. Después de seleccionar el canal aparecen únicamente las opciones correspondientes: configurar, vista previa, botones cuando corresponda, activar, desactivar o borrar.
 
-**Mis canales** muestra información general: título actual, `@usuario`, miembros, última sincronización y resumen de las cuatro configuraciones. Desde ahí se puede actualizar un canal individual o sincronizar todos los canales del cliente.
+**Mis canales** muestra información general: título actual, `@usuario`, miembros, última sincronización y resumen de Bienvenida, Despedida, Autocompletado, Firma y Filtros de unión. Desde ahí se puede actualizar un canal individual o sincronizar todos los canales del cliente.
 
 ## Sincronización automática
 

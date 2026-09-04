@@ -72,6 +72,12 @@ def channel_detail_text(channel: Channel) -> str:
     farewell_status = "Activa" if channel.farewell_enabled else "Desactivada"
     autocomplete_status = "Activo" if channel.autocomplete_enabled else "Desactivado"
     signature_status = "Activa" if channel.signature_enabled else "Desactivada"
+    join_filter_status = (
+        "Activo"
+        if channel.join_name_filter_enabled
+        or (channel.join_requirement and channel.join_requirement.enabled)
+        else "Desactivado"
+    )
     username = f"@{channel.username}" if channel.username else "Canal privado"
     members = f"{channel.member_count:,}" if channel.member_count is not None else "No disponible"
     checked = (
@@ -87,7 +93,8 @@ def channel_detail_text(channel: Channel) -> str:
         f"👋 <b>Bienvenida:</b> {status}\n"
         f"🚪 <b>Despedida:</b> {farewell_status}\n"
         f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
-        f"✍️ <b>Firma:</b> {signature_status}\n\n"
+        f"✍️ <b>Firma:</b> {signature_status}\n"
+        f"🛡 <b>Filtros de unión:</b> {join_filter_status}\n\n"
         "Estas funciones se administran ahora desde sus botones independientes del menú principal."
     )
 
@@ -451,7 +458,8 @@ async def add_channel_instructions(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         "➕ <b>Agregar un canal</b>\n\n"
         f"1. Abre tu canal y agrega a @{me.username} como administrador.\n"
-        "2. Concede el permiso <b>Publicar mensajes</b>.\n"
+        "2. Concede <b>Publicar mensajes</b>. Para filtros de unión concede también "
+        "<b>Invitar usuarios</b> y <b>Restringir miembros</b>.\n"
         "3. Regresa aquí; el canal se registrará automáticamente.\n\n"
         "La persona que agrega al bot debe ser la misma que usa este panel.",
         reply_markup=back_home(),
@@ -466,8 +474,17 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
         workspace = await ensure_user_workspace(session, actor)
         existing = await session.get(Channel, event.chat.id)
         new_member = event.new_chat_member
-        is_admin = new_member.status == ChatMemberStatus.ADMINISTRATOR
-        can_post = bool(getattr(new_member, "can_post_messages", False)) if is_admin else False
+        is_owner = new_member.status == ChatMemberStatus.CREATOR
+        is_admin = is_owner or new_member.status == ChatMemberStatus.ADMINISTRATOR
+        can_post = is_owner or (
+            bool(getattr(new_member, "can_post_messages", False)) if is_admin else False
+        )
+        can_invite = is_owner or (
+            bool(getattr(new_member, "can_invite_users", False)) if is_admin else False
+        )
+        can_restrict = is_owner or (
+            bool(getattr(new_member, "can_restrict_members", False)) if is_admin else False
+        )
 
         if is_admin:
             if existing is not None and existing.workspace_id != workspace.id:
@@ -503,13 +520,18 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                 ChannelStatus.active if can_post else ChannelStatus.missing_permissions
             )
             existing.can_post_messages = can_post
+            existing.can_invite_users = can_invite
+            existing.can_restrict_members = can_restrict
             existing.last_checked_at = utcnow()
             session.add(
                 AuditLog(
                     workspace_id=existing.workspace_id,
                     actor_user_id=actor.id,
                     action="channel.connected",
-                    details=f"chat_id={event.chat.id};can_post={can_post}",
+                    details=(
+                        f"chat_id={event.chat.id};can_post={can_post};"
+                        f"can_invite={can_invite};can_restrict={can_restrict}"
+                    ),
                 )
             )
             await session.commit()
@@ -531,6 +553,8 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
         }:
             existing.status = ChannelStatus.removed
             existing.can_post_messages = False
+            existing.can_invite_users = False
+            existing.can_restrict_members = False
             session.add(
                 AuditLog(
                     workspace_id=existing.workspace_id,

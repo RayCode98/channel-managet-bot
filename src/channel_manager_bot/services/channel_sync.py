@@ -20,6 +20,8 @@ class ChannelSnapshot:
     member_count: int | None
     status: ChannelStatus
     can_post_messages: bool
+    can_invite_users: bool = False
+    can_restrict_members: bool = False
 
 
 @dataclass(frozen=True)
@@ -42,10 +44,22 @@ def membership_access(member) -> tuple[ChannelStatus, bool]:
     return ChannelStatus.removed, False
 
 
+def membership_capabilities(member) -> tuple[bool, bool]:
+    if member.status == ChatMemberStatus.CREATOR:
+        return True, True
+    if member.status != ChatMemberStatus.ADMINISTRATOR:
+        return False, False
+    return (
+        bool(getattr(member, "can_invite_users", False)),
+        bool(getattr(member, "can_restrict_members", False)),
+    )
+
+
 async def fetch_channel_snapshot(bot: Bot, channel_id: int) -> ChannelSnapshot:
     chat = await bot.get_chat(channel_id)
     member = await bot.get_chat_member(channel_id, bot.id)
     status, can_post = membership_access(member)
+    can_invite, can_restrict = membership_capabilities(member)
     try:
         member_count = await bot.get_chat_member_count(channel_id)
     except TelegramAPIError as exc:
@@ -57,6 +71,8 @@ async def fetch_channel_snapshot(bot: Bot, channel_id: int) -> ChannelSnapshot:
         member_count=member_count,
         status=status,
         can_post_messages=can_post,
+        can_invite_users=can_invite,
+        can_restrict_members=can_restrict,
     )
 
 
@@ -69,6 +85,8 @@ def apply_channel_snapshot(channel: Channel, snapshot: ChannelSnapshot) -> None:
         channel.member_count = snapshot.member_count
     channel.status = snapshot.status
     channel.can_post_messages = snapshot.can_post_messages
+    channel.can_invite_users = snapshot.can_invite_users
+    channel.can_restrict_members = snapshot.can_restrict_members
     channel.last_checked_at = utcnow()
 
 
@@ -115,6 +133,8 @@ async def refresh_channels(
                     if channel is not None:
                         channel.status = ChannelStatus.removed
                         channel.can_post_messages = False
+                        channel.can_invite_users = False
+                        channel.can_restrict_members = False
                         channel.last_checked_at = utcnow()
                         await session.commit()
                 unavailable += 1

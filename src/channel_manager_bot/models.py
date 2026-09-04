@@ -86,6 +86,8 @@ class Channel(Base):
         Enum(ChannelStatus, name="channel_status_enum"), default=ChannelStatus.active
     )
     can_post_messages: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_invite_users: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_restrict_members: Mapped[bool] = mapped_column(Boolean, default=False)
     member_count: Mapped[int | None] = mapped_column(Integer)
     previous_member_count: Mapped[int | None] = mapped_column(Integer)
     welcome_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -106,6 +108,7 @@ class Channel(Base):
     autocomplete_text: Mapped[str | None] = mapped_column(Text)
     signature_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     signature_text: Mapped[str | None] = mapped_column(Text)
+    join_name_filter_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -114,6 +117,12 @@ class Channel(Base):
     )
     farewell_buttons: Mapped[list["FarewellButton"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin"
+    )
+    join_name_scripts: Mapped[list["JoinNameScript"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+    join_requirement: Mapped["JoinRequirement | None"] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", uselist=False
     )
 
 
@@ -141,6 +150,50 @@ class FarewellButton(Base):
     text: Mapped[str] = mapped_column(String(64))
     url: Mapped[str] = mapped_column(String(2048))
     style: Mapped[str | None] = mapped_column(String(16))
+
+
+class JoinNameScript(Base):
+    __tablename__ = "join_name_scripts"
+    __table_args__ = (
+        UniqueConstraint("channel_id", "script_code", name="uq_join_name_script_channel_code"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    script_code: Mapped[str] = mapped_column(String(16))
+
+
+class JoinRequirement(Base):
+    __tablename__ = "join_requirements"
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), primary_key=True
+    )
+    target_chat_id: Mapped[int] = mapped_column(BigInteger)
+    target_title: Mapped[str] = mapped_column(String(255))
+    target_type: Mapped[str] = mapped_column(String(20))
+    invite_url: Mapped[str] = mapped_column(String(2048))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RequirementChat(Base):
+    __tablename__ = "requirement_chats"
+    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(255))
+    username: Mapped[str | None] = mapped_column(String(64))
+    chat_type: Mapped[str] = mapped_column(String(20))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    can_invite_users: Mapped[bool] = mapped_column(Boolean, default=False)
+    added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Publication(Base):
@@ -273,8 +326,10 @@ class JoinRequestEvent(Base):
         ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[int] = mapped_column(BigInteger)
+    user_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     invite_link: Mapped[str | None] = mapped_column(String(2048))
     approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    outcome: Mapped[str] = mapped_column(String(32), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

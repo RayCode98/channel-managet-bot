@@ -23,8 +23,12 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Personalización de despedidas con `{nombre}` y `{canal}`, activación y vista previa.
 - Autocompletado por canal para publicaciones que no traen descripción.
 - Firma por canal agregada siempre al final de cada publicación.
+- Filtros de unión por canal basados en sistemas de escritura Unicode del nombre.
+- Bloqueo y rechazo automático cuando un nombre coincide con un filtro activo.
+- Membresía obligatoria en otro canal o grupo antes de aprobar una solicitud.
+- Verificación privada mediante botones para unirse y comprobar nuevamente.
 - Sincronización automática de nombre, usuario público, miembros y permisos de cada canal.
-- Menús independientes de Bienvenidas, Despedidas, Autocompletado y Firmas.
+- Menús independientes de Bienvenidas, Despedidas, Autocompletado, Firmas y Filtros de unión.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
 - Vista previa exacta de plantillas antes de utilizarlas.
@@ -92,6 +96,7 @@ Para ampliar las funciones posteriormente:
 - Editar mensajes de otros.
 - Eliminar mensajes.
 - Invitar usuarios, necesario para recibir y aprobar solicitudes.
+- Restringir miembros, necesario para bloquear nombres que coincidan con un filtro.
 
 El permiso para agregar suscriptores permite que Telegram entregue al bot las solicitudes de ingreso y que este pueda aprobarlas o rechazarlas.
 
@@ -101,7 +106,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si ya utilizas una versión entre v0.2.x y v0.6.x, sigue [`UPGRADE_V0.7.0.md`](UPGRADE_V0.7.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Si ya utilizas una versión entre v0.2.x y v0.7.x, sigue [`UPGRADE_V0.8.0.md`](UPGRADE_V0.8.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Cómo funciona la programación
 
@@ -138,9 +143,20 @@ Consulta la tabla completa de comportamiento en [`AUTOCOMPLETADO_Y_FIRMA.md`](AU
 
 El worker sincroniza todos los canales al iniciar y después cada seis horas. Consulta nuevamente a Telegram para actualizar el título, `@usuario`, cantidad de miembros, permiso para publicar y estado de acceso. El intervalo se puede cambiar con `CHANNEL_REFRESH_HOURS`; también existe **Mis canales → Sincronizar ahora**.
 
-Las personalizaciones se administran desde cuatro botones independientes del menú principal. El flujo es **función → canal → opciones**, por ejemplo: **Bienvenidas → Canal de noticias → Configurar bienvenida**. La sección **Mis canales** queda reservada para información general, conexión y sincronización.
+Las personalizaciones se administran desde cinco botones independientes del menú principal. El flujo es **función → canal → opciones**, por ejemplo: **Bienvenidas → Canal de noticias → Configurar bienvenida**. La sección **Mis canales** queda reservada para información general, conexión y sincronización.
 
 Consulta [`NAVEGACION_Y_SINCRONIZACION.md`](NAVEGACION_Y_SINCRONIZACION.md) para ver el flujo completo.
+
+## Filtros de unión
+
+Desde **Filtros de unión → elegir canal** se administran dos controles independientes:
+
+- **Filtro de escritura:** permite marcar sistemas como latino, cirílico, árabe/persa/urdu, devanagari, bengalí, hebreo, chino, japonés o coreano, entre otros. Si cualquier letra del nombre coincide, el bot bloquea a la persona y rechaza la solicitud.
+- **Forzar unión:** exige pertenecer a otro canal o grupo. Si la condición no se cumple, la solicitud queda pendiente y la persona recibe botones para unirse y verificar. Cuando Telegram confirma la membresía, el bot aprueba la solicitud automáticamente.
+
+Los sistemas de escritura no identifican nacionalidad. Varias lenguas comparten escritura y los nombres mixtos pueden contener más de una. Números, emojis y símbolos no activan el filtro. El filtro no revisa retroactivamente a miembros existentes.
+
+El bot necesita **Invitar usuarios** y **Restringir miembros** en el canal protegido. También debe ser administrador del destino para comprobar membresías; si el destino es privado, necesita **Invitar usuarios** para crear su enlace. Consulta el funcionamiento completo y los casos de prueba en [`FILTROS_DE_UNION.md`](FILTROS_DE_UNION.md).
 
 ## Seguridad aplicada
 

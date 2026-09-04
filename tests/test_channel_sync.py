@@ -8,6 +8,7 @@ from channel_manager_bot.services.channel_sync import (
     apply_channel_snapshot,
     fetch_channel_snapshot,
     membership_access,
+    membership_capabilities,
 )
 
 
@@ -25,6 +26,16 @@ def test_membership_access_requires_admin_post_permission():
     assert membership_access(missing) == (ChannelStatus.missing_permissions, False)
 
 
+def test_membership_capabilities_reads_join_filter_permissions():
+    member = SimpleNamespace(
+        status=ChatMemberStatus.ADMINISTRATOR,
+        can_invite_users=True,
+        can_restrict_members=False,
+    )
+
+    assert membership_capabilities(member) == (True, False)
+
+
 class FakeBot:
     id = 777
 
@@ -36,6 +47,8 @@ class FakeBot:
         return SimpleNamespace(
             status=ChatMemberStatus.ADMINISTRATOR,
             can_post_messages=True,
+            can_invite_users=True,
+            can_restrict_members=True,
         )
 
     async def get_chat_member_count(self, channel_id):
@@ -61,6 +74,8 @@ async def test_fetch_and_apply_channel_snapshot_updates_current_information():
     assert channel.previous_member_count == 200
     assert channel.member_count == 250
     assert channel.last_checked_at is not None
+    assert channel.can_invite_users
+    assert channel.can_restrict_members
 
 
 def test_unavailable_snapshot_updates_access_without_erasing_member_count():

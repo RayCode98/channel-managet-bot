@@ -55,7 +55,7 @@ No continúes si Frexo no aparece activo o si el disco está casi lleno.
 Desde PowerShell en tu computadora, cambia la ruta del archivo y la IP:
 
 ```powershell
-scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.7.0.zip" frexo@IP_DE_TU_VPS:/home/frexo/
+scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.8.0.zip" frexo@IP_DE_TU_VPS:/home/frexo/
 ```
 
 De regreso en el VPS, confirma primero que el destino no exista:
@@ -68,7 +68,7 @@ Si imprime `Destino disponible`, ejecuta:
 
 ```bash
 cd /opt
-unzip /home/frexo/telegram-channel-manager-v0.7.0.zip
+unzip /home/frexo/telegram-channel-manager-v0.8.0.zip
 mv /opt/telegram-channel-manager /opt/channel-manager
 cd /opt/channel-manager
 ```
@@ -179,7 +179,7 @@ Los contenedores nuevos deben comenzar con `channel-manager-`. Los de Frexo debe
 2. Envía `/health` desde la cuenta indicada en `PLATFORM_ADMIN_IDS`.
 3. Debes recibir confirmación del bot, base de datos y worker.
 4. Agrega el bot como administrador de un canal de prueba.
-5. Concede **Publicar mensajes** y, para solicitudes, **Invitar usuarios**.
+5. Concede **Publicar mensajes** y, para solicitudes, **Invitar usuarios**. Si usarás filtros de escritura, concede también **Restringir miembros**.
 6. Crea una publicación de prueba y prográmala unos minutos adelante.
 
 ## Operación independiente

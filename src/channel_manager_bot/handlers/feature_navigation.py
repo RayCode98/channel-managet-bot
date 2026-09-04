@@ -12,6 +12,7 @@ FEATURES = {
     "farewell": ("🚪", "Despedidas", "configurar la despedida"),
     "auto": ("🪄", "Autocompletado", "configurar el autocompletado"),
     "signature": ("✍️", "Firmas", "configurar la firma"),
+    "joinfilter": ("🛡", "Filtros de unión", "configurar los filtros de unión"),
 }
 
 
