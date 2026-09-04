@@ -73,13 +73,18 @@ async def open_channel(callback: CallbackQuery) -> None:
     button_count = len(channel.welcome_buttons)
     status = "Activa" if channel.welcome_enabled else "Desactivada"
     farewell_status = "Activa" if channel.farewell_enabled else "Desactivada"
+    autocomplete_status = "Activo" if channel.autocomplete_enabled else "Desactivado"
+    signature_status = "Activa" if channel.signature_enabled else "Desactivada"
     await callback.message.edit_text(
         f"⚙️ <b>{escape(channel.title)}</b>\n\n"
         f"👋 <b>Bienvenida:</b> {status}\n"
         f"🔗 <b>Botones:</b> {button_count}\n\n"
         f"🚪 <b>Despedida:</b> {farewell_status}\n\n"
+        f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
+        f"✍️ <b>Firma:</b> {signature_status}\n\n"
         "La bienvenida se envía al solicitar el ingreso. La despedida se intenta enviar cuando "
-        "Telegram informa que un suscriptor abandonó el canal.",
+        "Telegram informa que un suscriptor abandonó el canal. El autocompletado cubre "
+        "publicaciones sin descripción y la firma se agrega siempre al final.",
         reply_markup=channel_detail_menu(channel),
     )
     await callback.answer()

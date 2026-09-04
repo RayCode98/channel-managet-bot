@@ -18,6 +18,7 @@ from ..models import (
     PublishedMessage,
 )
 from ..repository import utcnow
+from .post_text import send_publication_to_channel
 from .recurrence import next_recurrence_at
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,8 @@ async def create_next_recurrence(
         creator_user_id=publication.creator_user_id,
         source_chat_id=publication.source_chat_id,
         source_message_id=publication.source_message_id,
+        source_content_type=publication.source_content_type,
+        source_text_html=publication.source_text_html,
         preview=publication.preview,
         status=PublicationStatus.scheduled,
         scheduled_at=next_recurrence_at(
@@ -172,10 +175,10 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 successes += 1
                 continue
             try:
-                sent = await bot.copy_message(
-                    chat_id=channel.telegram_chat_id,
-                    from_chat_id=publication.source_chat_id,
-                    message_id=publication.source_message_id,
+                sent = await send_publication_to_channel(
+                    bot=bot,
+                    publication=publication,
+                    channel=channel,
                     reply_markup=markup,
                 )
                 result = existing or PublishedMessage(

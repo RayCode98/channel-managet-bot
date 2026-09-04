@@ -130,9 +130,73 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
                     callback_data=f"farewell:menu:{channel.telegram_chat_id}",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text=(f"🪄 Autocompletado: {'✅' if channel.autocomplete_enabled else '❌'}"),
+                    callback_data=f"posttext:menu:auto:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"✍️ Firma: {'✅' if channel.signature_enabled else '❌'}",
+                    callback_data=f"posttext:menu:signature:{channel.telegram_chat_id}",
+                )
+            ],
             [InlineKeyboardButton(text="⬅️ Mis canales", callback_data="channels:list")],
         ]
     )
+
+
+def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
+    if kind == "auto":
+        configured = bool(channel.autocomplete_text)
+        enabled = channel.autocomplete_enabled
+        configure_label = "🪄 Configurar autocompletado"
+    else:
+        configured = bool(channel.signature_text)
+        enabled = channel.signature_enabled
+        configure_label = "✍️ Configurar firma"
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=configure_label,
+                callback_data=f"posttext:set:{kind}:{channel.telegram_chat_id}",
+            )
+        ]
+    ]
+    if configured:
+        rows.extend(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="👁 Vista previa",
+                        callback_data=f"posttext:preview:{kind}:{channel.telegram_chat_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=f"Estado: {'✅ Activo' if enabled else '❌ Desactivado'}",
+                        callback_data=f"posttext:toggle:{kind}:{channel.telegram_chat_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🗑 Borrar texto",
+                        callback_data=f"posttext:clear:{kind}:{channel.telegram_chat_id}",
+                    )
+                ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver al canal",
+                callback_data=f"channel:open:{channel.telegram_chat_id}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def welcome_buttons_menu(channel_id: int, buttons: list[WelcomeButton]) -> InlineKeyboardMarkup:

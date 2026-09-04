@@ -23,6 +23,7 @@ from ..keyboards import (
 )
 from ..models import ContentTemplate, Publication, PublicationButton, TemplateButton
 from ..repository import get_active_channels, get_workspace
+from ..services.post_text import publication_content_type, publication_text_html
 from ..states import PublicationFlow, TemplateFlow
 
 router = Router(name="templates")
@@ -133,6 +134,8 @@ async def receive_template_content(message: Message, state: FSMContext) -> None:
             name=data["template_name"],
             source_chat_id=message.chat.id,
             source_message_id=message.message_id,
+            source_content_type=publication_content_type(message),
+            source_text_html=publication_text_html(message),
             preview=(message.text or message.caption or "Contenido multimedia")[:500],
         )
         session.add(template)
@@ -356,6 +359,8 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
             creator_user_id=callback.from_user.id,
             source_chat_id=template.source_chat_id,
             source_message_id=template.source_message_id,
+            source_content_type=template.source_content_type,
+            source_text_html=template.source_text_html,
             preview=template.preview,
             delete_after_minutes=template.delete_after_minutes,
         )

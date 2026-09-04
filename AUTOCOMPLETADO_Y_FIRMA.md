@@ -1,0 +1,39 @@
+# Autocompletado y firma por canal
+
+Estas funciones aplican textos automáticos a las publicaciones según el canal de destino. No utilizan inteligencia artificial.
+
+## Reglas
+
+| Contenido original | Autocompletado | Firma | Resultado |
+| --- | --- | --- | --- |
+| Sin descripción | Activo | Desactivada | Autocompletado |
+| Sin descripción | Activo | Activa | Autocompletado, línea en blanco y firma |
+| Sin descripción | Desactivado | Activa | Firma |
+| Con descripción | Activo o desactivado | Desactivada | Descripción original |
+| Con descripción | Activo o desactivado | Activa | Descripción original, línea en blanco y firma |
+
+El autocompletado nunca reemplaza una descripción existente. La firma siempre ocupa la última posición cuando está activa.
+
+## Configuración desde Telegram
+
+1. Abre **Mis canales**.
+2. Selecciona el canal.
+3. Entra en **Autocompletado** o **Firma**.
+4. Envía el texto con el formato que deseas conservar.
+5. Usa **Vista previa** para comprobar el resultado.
+
+Cada opción permite actualizar el texto, activarlo o desactivarlo temporalmente y borrarlo. El límite es de 500 unidades de texto de Telegram por configuración.
+
+## Publicaciones con varios destinos
+
+Las reglas se calculan al momento del envío para cada canal. Por ejemplo, una foto sin descripción puede recibir un texto y una firma en el canal A, otra firma en el canal B y permanecer sin descripción en el canal C.
+
+Las publicaciones recurrentes consultan la configuración actual en cada ejecución. Si la firma cambia hoy, la siguiente repetición utilizará la firma nueva.
+
+## Compatibilidad
+
+Las nuevas publicaciones y plantillas guardan una representación HTML segura del texto recibido para poder adjuntar la firma sin perder negritas, enlaces, emojis personalizados u otras entidades compatibles.
+
+Las publicaciones y plantillas creadas antes de v0.6.0 no contienen esa representación. Se copian sin modificaciones para evitar pérdida de formato. Si una plantilla antigua debe utilizar estas reglas, hay que volver a crearla después de actualizar.
+
+Telegram admite hasta 1024 caracteres procesados en descripciones multimedia. Los textos configurables se limitan para que `autocompletado + firma` quepa normalmente cuando la publicación no tiene descripción. Una descripción original cercana al máximo podría no admitir una firma extensa; en ese caso conviene reducir alguno de los textos.

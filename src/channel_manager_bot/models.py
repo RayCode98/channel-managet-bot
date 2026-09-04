@@ -102,6 +102,10 @@ class Channel(Base):
     farewell_content_type: Mapped[str | None] = mapped_column(String(20))
     farewell_text_template: Mapped[str | None] = mapped_column(Text)
     farewell_file_id: Mapped[str | None] = mapped_column(String(512))
+    autocomplete_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    autocomplete_text: Mapped[str | None] = mapped_column(Text)
+    signature_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    signature_text: Mapped[str | None] = mapped_column(Text)
     added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -159,6 +163,8 @@ class Publication(Base):
     creator_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     source_chat_id: Mapped[int] = mapped_column(BigInteger)
     source_message_id: Mapped[int] = mapped_column(BigInteger)
+    source_content_type: Mapped[str | None] = mapped_column(String(20))
+    source_text_html: Mapped[str | None] = mapped_column(Text)
     preview: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[PublicationStatus] = mapped_column(
         Enum(PublicationStatus, name="publication_status_enum"),
@@ -235,6 +241,8 @@ class ContentTemplate(Base):
     name: Mapped[str] = mapped_column(String(100))
     source_chat_id: Mapped[int] = mapped_column(BigInteger)
     source_message_id: Mapped[int] = mapped_column(BigInteger)
+    source_content_type: Mapped[str | None] = mapped_column(String(20))
+    source_text_html: Mapped[str | None] = mapped_column(Text)
     preview: Mapped[str | None] = mapped_column(String(500))
     delete_after_minutes: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

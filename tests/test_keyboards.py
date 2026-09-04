@@ -2,6 +2,7 @@ import uuid
 
 from channel_manager_bot.keyboards import (
     channel_detail_menu,
+    channel_post_text_menu,
     composer_menu,
     farewell_menu,
     publication_markup,
@@ -88,6 +89,8 @@ def test_configured_channel_has_buttons_and_preview_actions():
     assert "welcome:manage:-1001234567890" in callbacks
     assert "welcome:preview:-1001234567890" in callbacks
     assert "farewell:menu:-1001234567890" in callbacks
+    assert "posttext:menu:auto:-1001234567890" in callbacks
+    assert "posttext:menu:signature:-1001234567890" in callbacks
 
 
 def test_configured_farewell_has_preview_and_button_management():
@@ -115,6 +118,26 @@ def test_configured_farewell_has_preview_and_button_management():
     assert "farewell:manage:-1001234567890" in callbacks
     assert "farewell:preview:-1001234567890" in callbacks
     assert "farewell:toggle:-1001234567890" in callbacks
+
+
+def test_channel_post_text_menu_offers_preview_toggle_and_clear():
+    channel = Channel(
+        telegram_chat_id=-1001234567890,
+        title="Canal",
+        autocomplete_enabled=True,
+        autocomplete_text="Texto automático",
+    )
+
+    callbacks = [
+        button.callback_data
+        for row in channel_post_text_menu(channel, "auto").inline_keyboard
+        for button in row
+    ]
+
+    assert "posttext:preview:auto:-1001234567890" in callbacks
+    assert "posttext:toggle:auto:-1001234567890" in callbacks
+    assert "posttext:clear:auto:-1001234567890" in callbacks
+    assert all(len(callback.encode()) <= 64 for callback in callbacks)
 
 
 def test_publication_and_template_menus_offer_button_management():

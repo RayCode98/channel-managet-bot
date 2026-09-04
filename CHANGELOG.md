@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.6.0
+
+- Autocompletado independiente para cada canal.
+- El autocompletado solo cubre publicaciones sin texto o descripción; nunca sustituye contenido existente.
+- Firma independiente por canal, agregada siempre al final de la publicación.
+- Combinación automática `descripción original + firma` o `autocompletado + firma`.
+- Texto enriquecido de Telegram conservado en ambas configuraciones.
+- Vista previa, activación, desactivación y borrado desde la configuración del canal.
+- Aplicación diferente por cada canal cuando una publicación tiene varios destinos.
+- Nuevas publicaciones, plantillas y recurrencias conservan una copia HTML del texto original.
+- Compatibilidad segura con trabajos creados antes de esta versión: se publican sin alteración.
+- Migración incremental `20260904_0006` compatible con instalaciones anteriores.
+
 ## 0.5.0
 
 - Despedida independiente para cada canal desde su propia configuración.

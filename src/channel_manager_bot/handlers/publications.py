@@ -33,6 +33,7 @@ from ..models import (
     PublicationStatus,
 )
 from ..repository import get_active_channels, get_workspace, utcnow
+from ..services.post_text import publication_content_type, publication_text_html
 from ..states import PublicationFlow
 
 router = Router(name="publications")
@@ -103,6 +104,8 @@ async def receive_content(message: Message, state: FSMContext) -> None:
             creator_user_id=message.from_user.id,
             source_chat_id=message.chat.id,
             source_message_id=message.message_id,
+            source_content_type=publication_content_type(message),
+            source_text_html=publication_text_html(message),
             preview=(message.text or message.caption or "Publicación multimedia")[:500],
         )
         session.add(publication)
