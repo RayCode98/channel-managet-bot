@@ -12,6 +12,9 @@ from channel_manager_bot.keyboards import (
     publication_markup,
     recurrence_interval_menu,
     recurrence_label,
+    relay_rule_menu,
+    relay_sources_menu,
+    relay_targets_menu,
     settings_menu,
     template_detail_menu,
     timing_menu,
@@ -19,7 +22,13 @@ from channel_manager_bot.keyboards import (
     ttl_menu,
     welcome_menu,
 )
-from channel_manager_bot.models import Channel, FarewellButton, WelcomeButton
+from channel_manager_bot.models import (
+    Channel,
+    FarewellButton,
+    RelayDestination,
+    RelayRule,
+    WelcomeButton,
+)
 
 
 class Button:
@@ -102,6 +111,7 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "feature:channels:auto" in main_callbacks
     assert "feature:channels:signature" in main_callbacks
     assert "feature:channels:joinfilter" in main_callbacks
+    assert "relay:sources" in main_callbacks
     assert channel_callbacks == ["channel:refresh:-1001234567890", "channels:list"]
     assert "welcome:buttons:-1001234567890" in welcome_callbacks
     assert "welcome:manage:-1001234567890" in welcome_callbacks
@@ -118,7 +128,7 @@ def test_feature_channel_list_routes_directly_to_selected_configuration():
 
     button = feature_channels_menu([channel], "farewell").inline_keyboard[0][0]
 
-    assert button.text == "✅ Canal"
+    assert button.text == "✅ 📢 Canal"
     assert button.callback_data == "farewell:menu:-1001234567890"
 
 
@@ -137,7 +147,7 @@ def test_join_filter_channel_list_and_alphabet_callbacks_are_valid():
         if button.callback_data
     ]
 
-    assert channel_button.text == "✅ Canal protegido"
+    assert channel_button.text == "✅ 📢 Canal protegido"
     assert channel_button.callback_data == "jfilter:menu:-1001234567890"
     assert "jfilter:script:arab:-1001234567890" in callbacks
     assert "jfilter:script:deva:-1001234567890" in callbacks
@@ -237,3 +247,49 @@ def test_recurrence_menus_offer_presets_custom_interval_and_start_choice():
     assert recurrence_label(1) == "Cada día"
     assert recurrence_label(14) == "Cada 14 días"
     assert all(len(callback.encode()) <= 64 for callback in interval_callbacks)
+
+
+def test_relay_menus_support_channels_groups_and_multiple_destinations():
+    channel = Channel(
+        telegram_chat_id=-1001,
+        title="Noticias",
+        chat_type="channel",
+    )
+    group = Channel(
+        telegram_chat_id=-1002,
+        title="Comunidad",
+        chat_type="supergroup",
+    )
+    rule = RelayRule(
+        id=uuid.uuid4(),
+        source_chat_id=channel.telegram_chat_id,
+        enabled=True,
+        creator_user_id=123,
+    )
+    rule.destinations.append(
+        RelayDestination(
+            id=uuid.uuid4(),
+            destination_chat_id=group.telegram_chat_id,
+        )
+    )
+
+    source_button = relay_sources_menu(
+        [channel, group], {channel.telegram_chat_id: rule}
+    ).inline_keyboard[0][0]
+    rule_callbacks = [
+        button.callback_data
+        for row in relay_rule_menu(channel.telegram_chat_id, rule).inline_keyboard
+        for button in row
+    ]
+    target_button = relay_targets_menu(
+        channel.telegram_chat_id,
+        [channel, group],
+        {group.telegram_chat_id},
+    ).inline_keyboard[0][0]
+
+    assert source_button.text == "✅ 📢 Noticias"
+    assert source_button.callback_data == "relay:menu:-1001"
+    assert target_button.text == "✅ 👥 Comunidad"
+    assert target_button.callback_data == "relay:dest:-1001:-1002"
+    assert "relay:targets:-1001" in rule_callbacks
+    assert "relay:toggle:-1001" in rule_callbacks

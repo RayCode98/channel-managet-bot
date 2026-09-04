@@ -9,7 +9,7 @@ from .models import (
     FarewellButton,
     JoinRequirement,
     PublicationButton,
-    RequirementChat,
+    RelayRule,
     TemplateButton,
     WelcomeButton,
 )
@@ -36,6 +36,10 @@ def recurrence_label(days: int | None) -> str:
     return f"Cada {days} días"
 
 
+def chat_icon(channel: Channel) -> str:
+    return "👥" if channel.chat_type in {"group", "supergroup"} else "📢"
+
+
 def main_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📝 Crear publicación", callback_data="pub:new")
@@ -46,11 +50,12 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="🪄 Autocompletado", callback_data="feature:channels:auto")
     builder.button(text="✍️ Firmas", callback_data="feature:channels:signature")
     builder.button(text="🛡 Filtros de unión", callback_data="feature:channels:joinfilter")
+    builder.button(text="↪️ Reenvío", callback_data="relay:sources")
     builder.button(text="📚 Historial", callback_data="pub:list")
-    builder.button(text="📢 Mis canales", callback_data="channels:list")
+    builder.button(text="📚 Canales y grupos", callback_data="channels:list")
     builder.button(text="📊 Estadísticas", callback_data="stats:show")
     builder.button(text="⚙️ Automatizaciones", callback_data="settings:show")
-    builder.adjust(1, 2, 2, 2, 2, 2, 1)
+    builder.adjust(1, 2, 2, 2, 2, 2, 2)
     return builder.as_markup()
 
 
@@ -64,7 +69,7 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
     rows = [
         [
             InlineKeyboardButton(
-                text=f"⚙️ {channel.title}"[:64],
+                text=f"{chat_icon(channel)} {channel.title}"[:64],
                 callback_data=f"channel:open:{channel.telegram_chat_id}",
             )
         ]
@@ -72,7 +77,11 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
     ]
     rows.extend(
         [
-            [InlineKeyboardButton(text="➕ Agregar canal", callback_data="channels:add")],
+            [
+                InlineKeyboardButton(
+                    text="➕ Agregar canal o grupo", callback_data="channels:add"
+                )
+            ],
             [InlineKeyboardButton(text="🔄 Sincronizar ahora", callback_data="channels:refresh")],
             [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
         ]
@@ -89,7 +98,7 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
                     callback_data=f"channel:refresh:{channel.telegram_chat_id}",
                 )
             ],
-            [InlineKeyboardButton(text="⬅️ Mis canales", callback_data="channels:list")],
+            [InlineKeyboardButton(text="⬅️ Canales y grupos", callback_data="channels:list")],
         ]
     )
 
@@ -119,7 +128,10 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{'✅' if enabled(channel) else '❌'} {channel.title}"[:64],
+                text=(
+                    f"{'✅' if enabled(channel) else '❌'} "
+                    f"{chat_icon(channel)} {channel.title}"
+                )[:64],
                 callback_data=destination(channel),
             )
         ]
@@ -150,7 +162,7 @@ def join_filter_menu(channel: Channel) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Canales con filtros",
+                    text="⬅️ Chats con filtros",
                     callback_data="feature:channels:joinfilter",
                 )
             ],
@@ -185,7 +197,7 @@ def alphabet_filter_menu(
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Filtros del canal", callback_data=f"jfilter:menu:{channel_id}"
+                    text="⬅️ Filtros del chat", callback_data=f"jfilter:menu:{channel_id}"
                 )
             ],
         ]
@@ -222,7 +234,7 @@ def force_join_menu(channel_id: int, requirement: JoinRequirement | None) -> Inl
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Filtros del canal", callback_data=f"jfilter:menu:{channel_id}"
+                text="⬅️ Filtros del chat", callback_data=f"jfilter:menu:{channel_id}"
             )
         ]
     )
@@ -232,31 +244,17 @@ def force_join_menu(channel_id: int, requirement: JoinRequirement | None) -> Inl
 def force_target_menu(
     source_channel_id: int,
     channels: list[Channel],
-    groups: list[RequirementChat],
 ) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text=f"📢 {channel.title}"[:64],
+                text=f"{chat_icon(channel)} {channel.title}"[:64],
                 callback_data=(f"jfilter:target:c:{channel.telegram_chat_id}:{source_channel_id}"),
             )
         ]
         for channel in channels
         if channel.telegram_chat_id != source_channel_id
     ]
-    rows.extend(
-        [
-            [
-                InlineKeyboardButton(
-                    text=f"👥 {group.title}"[:64],
-                    callback_data=(
-                        f"jfilter:target:g:{group.telegram_chat_id}:{source_channel_id}"
-                    ),
-                )
-            ]
-            for group in groups
-        ]
-    )
     rows.append(
         [
             InlineKeyboardButton(
@@ -281,6 +279,77 @@ def join_verification_menu(
             ],
         ]
     )
+
+
+def relay_sources_menu(
+    channels: list[Channel], rules_by_source: dict[int, RelayRule]
+) -> InlineKeyboardMarkup:
+    rows = []
+    for channel in channels:
+        rule = rules_by_source.get(channel.telegram_chat_id)
+        active = bool(rule and rule.enabled and rule.destinations)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if active else '❌'} {chat_icon(channel)} {channel.title}"[:64],
+                    callback_data=f"relay:menu:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def relay_rule_menu(source_chat_id: int, rule: RelayRule | None) -> InlineKeyboardMarkup:
+    destination_count = len(rule.destinations) if rule else 0
+    enabled = bool(rule and rule.enabled)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🎯 Destinos ({destination_count})",
+                callback_data=f"relay:targets:{source_chat_id}",
+            )
+        ]
+    ]
+    if rule is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"Reenvío: {'✅ Activo' if enabled else '❌ Desactivado'}",
+                    callback_data=f"relay:toggle:{source_chat_id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ Orígenes", callback_data="relay:sources")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def relay_targets_menu(
+    source_chat_id: int, channels: list[Channel], selected: set[int]
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=(
+                    f"{'✅' if channel.telegram_chat_id in selected else '▫️'} "
+                    f"{chat_icon(channel)} {channel.title}"
+                )[:64],
+                callback_data=(
+                    f"relay:dest:{source_chat_id}:{channel.telegram_chat_id}"
+                ),
+            )
+        ]
+        for channel in channels
+        if channel.telegram_chat_id != source_chat_id
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Configuración", callback_data=f"relay:menu:{source_chat_id}"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def welcome_menu(channel: Channel) -> InlineKeyboardMarkup:
@@ -337,7 +406,7 @@ def welcome_menu(channel: Channel) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Canales con bienvenida",
+                text="⬅️ Chats con bienvenida",
                 callback_data="feature:channels:welcome",
             )
         ]
@@ -389,7 +458,7 @@ def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Volver a canales",
+                text="⬅️ Volver a chats",
                 callback_data=f"feature:channels:{kind}",
             )
         ]
@@ -470,7 +539,7 @@ def farewell_menu(channel: Channel) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Canales con despedida",
+                text="⬅️ Chats con despedida",
                 callback_data="feature:channels:farewell",
             )
         ]
@@ -524,7 +593,7 @@ def composer_menu(
             ],
             [
                 InlineKeyboardButton(
-                    text="📢 Elegir canales", callback_data=f"pub:channels:{short_id}"
+                    text="🎯 Elegir destinos", callback_data=f"pub:channels:{short_id}"
                 )
             ],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"pub:cancel:{short_id}")],
@@ -557,7 +626,7 @@ def channel_selector(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{mark} {channel.title}"[:64],
+                    text=f"{mark} {chat_icon(channel)} {channel.title}"[:64],
                     callback_data=f"pub:toggle:{publication_id}:{channel.telegram_chat_id}",
                 )
             ]

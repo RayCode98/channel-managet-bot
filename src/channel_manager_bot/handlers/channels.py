@@ -36,6 +36,10 @@ router = Router(name="channels")
 logger = logging.getLogger(__name__)
 
 
+def chat_kind(channel: Channel) -> str:
+    return "Grupo" if channel.chat_type in {"group", "supergroup"} else "Canal"
+
+
 async def owned_channel(session, channel_id: int, user_id: int) -> Channel | None:
     workspace = await get_workspace(session, user_id)
     if workspace is None:
@@ -54,16 +58,20 @@ async def render_channels_list(callback: CallbackQuery) -> None:
         workspace = await get_workspace(session, callback.from_user.id)
         channels = await get_active_channels(session, workspace.id) if workspace else []
     if channels:
-        lines = ["📢 <b>Canales conectados</b>", ""]
+        lines = ["📚 <b>Canales y grupos vinculados</b>", ""]
         for channel in channels:
             handle = f"@{channel.username}" if channel.username else "privado"
             count = (
                 f" · {channel.member_count:,} miembros" if channel.member_count is not None else ""
             )
-            lines.append(f"• <b>{escape(channel.title)}</b> ({handle}){count}")
+            icon = "👥" if channel.chat_type in {"group", "supergroup"} else "📢"
+            lines.append(f"• {icon} <b>{escape(channel.title)}</b> ({handle}){count}")
         text = "\n".join(lines)
     else:
-        text = "📢 <b>Canales conectados</b>\n\nTodavía no has agregado ningún canal."
+        text = (
+            "📚 <b>Canales y grupos vinculados</b>\n\n"
+            "Todavía no has agregado ningún canal o grupo."
+        )
     await callback.message.edit_text(text, reply_markup=channels_menu(channels))
 
 
@@ -78,7 +86,7 @@ def channel_detail_text(channel: Channel) -> str:
         or (channel.join_requirement and channel.join_requirement.enabled)
         else "Desactivado"
     )
-    username = f"@{channel.username}" if channel.username else "Canal privado"
+    username = f"@{channel.username}" if channel.username else f"{chat_kind(channel)} privado"
     members = f"{channel.member_count:,}" if channel.member_count is not None else "No disponible"
     checked = (
         channel.last_checked_at.strftime("%d/%m/%Y %H:%M UTC")
@@ -87,6 +95,7 @@ def channel_detail_text(channel: Channel) -> str:
     )
     return (
         f"⚙️ <b>{escape(channel.title)}</b>\n\n"
+        f"🏷 <b>Tipo:</b> {chat_kind(channel)}\n"
         f"🔗 <b>Usuario:</b> {escape(username)}\n"
         f"👥 <b>Miembros:</b> {members}\n"
         f"🔄 <b>Última sincronización:</b> {checked}\n\n"
@@ -104,7 +113,7 @@ def welcome_menu_text(channel: Channel) -> str:
         f"👋 <b>Bienvenida de {escape(channel.title)}</b>\n\n"
         f"Estado: <b>{'Activa' if channel.welcome_enabled else 'Desactivada'}</b>\n"
         f"Botones: <b>{len(channel.welcome_buttons)}</b>\n\n"
-        "Puedes configurar contenido, variables, botones y vista previa para este canal."
+        "Puedes configurar contenido, variables, botones y vista previa para este chat."
     )
 
 
@@ -121,7 +130,7 @@ async def refresh_channels_list(callback: CallbackQuery) -> None:
     if workspace is None:
         await callback.answer("Cuenta no encontrada.", show_alert=True)
         return
-    await callback.answer("Sincronizando canales…")
+    await callback.answer("Sincronizando canales y grupos…")
     await refresh_channels(callback.bot, workspace_id=workspace.id)
     await render_channels_list(callback)
 
@@ -132,7 +141,7 @@ async def open_channel(callback: CallbackQuery) -> None:
     async with SessionFactory() as session:
         channel = await owned_channel(session, channel_id, callback.from_user.id)
     if channel is None:
-        await callback.answer("Canal no encontrado.", show_alert=True)
+        await callback.answer("Canal o grupo no encontrado.", show_alert=True)
         return
     await callback.message.edit_text(
         channel_detail_text(channel),
@@ -149,7 +158,7 @@ async def refresh_one_channel(callback: CallbackQuery) -> None:
     if channel is None:
         await callback.answer("Canal no encontrado.", show_alert=True)
         return
-    await callback.answer("Sincronizando canal…")
+    await callback.answer("Sincronizando chat…")
     await refresh_channels(
         callback.bot,
         workspace_id=channel.workspace_id,
@@ -197,7 +206,7 @@ async def ask_channel_welcome(callback: CallbackQuery, state: FSMContext) -> Non
         "animación, audio, voz o documento.\n\n"
         "Puedes insertar estas variables en el texto:\n"
         "• <code>{nombre}</code>: nombre de la persona que solicita entrar.\n"
-        "• <code>{canal}</code>: nombre de este canal.\n\n"
+        "• <code>{canal}</code>: nombre de este canal o grupo.\n\n"
         "Ejemplo: <code>Hola {nombre}, te damos la bienvenida a {canal}.</code>"
     )
     await callback.answer()
@@ -223,7 +232,7 @@ async def save_channel_welcome(message: Message, state: FSMContext) -> None:
         channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
         if channel is None:
             await state.clear()
-            await message.answer("Canal no encontrado.")
+            await message.answer("Canal o grupo no encontrado.")
             return
         content_type, text_template, file_id = content_from_message(message)
         channel.welcome_source_chat_id = message.chat.id
@@ -452,32 +461,35 @@ async def add_channel_instructions(callback: CallbackQuery) -> None:
         workspace = await get_workspace(session, callback.from_user.id)
         allowed = await can_add_channel(session, workspace.id)
     if not allowed:
-        await callback.answer("Tu cuenta alcanzó el límite de canales.", show_alert=True)
+        await callback.answer("Tu cuenta alcanzó el límite de chats vinculados.", show_alert=True)
         return
     me = await callback.bot.get_me()
     await callback.message.edit_text(
-        "➕ <b>Agregar un canal</b>\n\n"
-        f"1. Abre tu canal y agrega a @{me.username} como administrador.\n"
-        "2. Concede <b>Publicar mensajes</b>. Para filtros de unión concede también "
-        "<b>Invitar usuarios</b> y <b>Restringir miembros</b>.\n"
-        "3. Regresa aquí; el canal se registrará automáticamente.\n\n"
+        "➕ <b>Agregar un canal o grupo</b>\n\n"
+        f"1. Abre el canal, grupo o supergrupo y agrega a @{me.username} como administrador.\n"
+        "2. En canales concede <b>Publicar mensajes</b>. Para filtros de unión concede "
+        "también <b>Invitar usuarios</b> y <b>Restringir miembros</b>.\n"
+        "3. Regresa aquí; el chat se registrará automáticamente.\n\n"
         "La persona que agrega al bot debe ser la misma que usa este panel.",
         reply_markup=back_home(),
     )
     await callback.answer()
 
 
-@router.my_chat_member(F.chat.type == ChatType.CHANNEL)
+@router.my_chat_member(
+    F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
+)
 async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
     actor = event.from_user
     async with SessionFactory() as session:
         workspace = await ensure_user_workspace(session, actor)
         existing = await session.get(Channel, event.chat.id)
         new_member = event.new_chat_member
+        is_group = event.chat.type in {ChatType.GROUP, ChatType.SUPERGROUP}
         is_owner = new_member.status == ChatMemberStatus.CREATOR
         is_admin = is_owner or new_member.status == ChatMemberStatus.ADMINISTRATOR
-        can_post = is_owner or (
-            bool(getattr(new_member, "can_post_messages", False)) if is_admin else False
+        can_post = is_admin if is_group else is_owner or bool(
+            getattr(new_member, "can_post_messages", False)
         )
         can_invite = is_owner or (
             bool(getattr(new_member, "can_invite_users", False)) if is_admin else False
@@ -497,12 +509,12 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                 if member_of_owner_workspace is None:
                     await bot.send_message(
                         actor.id,
-                        "⚠️ Este canal ya está vinculado a otra cuenta. Debe desvincularlo su propietario.",
+                        "⚠️ Este chat ya está vinculado a otra cuenta. Debe desvincularlo su propietario.",
                     )
                     return
             if existing is None and not await can_add_channel(session, workspace.id):
                 await bot.send_message(
-                    actor.id, "⚠️ No pude agregar el canal: alcanzaste el límite de tu cuenta."
+                    actor.id, "⚠️ No pude agregar el chat: alcanzaste el límite de tu cuenta."
                 )
                 return
             if existing is None:
@@ -511,11 +523,13 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                     workspace_id=workspace.id,
                     title=event.chat.title or str(event.chat.id),
                     username=event.chat.username,
+                    chat_type=event.chat.type.value,
                     added_by_user_id=actor.id,
                 )
                 session.add(existing)
             existing.title = event.chat.title or existing.title
             existing.username = event.chat.username
+            existing.chat_type = event.chat.type.value
             existing.status = (
                 ChannelStatus.active if can_post else ChannelStatus.missing_permissions
             )
@@ -527,9 +541,10 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                 AuditLog(
                     workspace_id=existing.workspace_id,
                     actor_user_id=actor.id,
-                    action="channel.connected",
+                    action="chat.connected",
                     details=(
-                        f"chat_id={event.chat.id};can_post={can_post};"
+                        f"chat_id={event.chat.id};type={event.chat.type.value};"
+                        f"can_post={can_post};"
                         f"can_invite={can_invite};can_restrict={can_restrict}"
                     ),
                 )
@@ -542,7 +557,7 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
             else:
                 await bot.send_message(
                     actor.id,
-                    f"⚠️ <b>{escape(existing.title)}</b> necesita el permiso para publicar mensajes.",
+                    f"⚠️ <b>{escape(existing.title)}</b> necesita permisos para publicar.",
                 )
             return
 
@@ -559,7 +574,7 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                 AuditLog(
                     workspace_id=existing.workspace_id,
                     actor_user_id=actor.id,
-                    action="channel.disconnected",
+                    action="chat.disconnected",
                     details=f"chat_id={event.chat.id}",
                 )
             )

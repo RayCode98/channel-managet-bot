@@ -14,7 +14,8 @@ async def render_settings(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         "⚙️ <b>Automatizaciones</b>\n\n"
         "Administra el procesamiento automático de solicitudes.\n\n"
-        "ℹ️ Las bienvenidas se configuran individualmente desde <b>Mis canales</b>.",
+        "ℹ️ Bienvenidas, filtros y otras funciones por chat tienen sus propios botones "
+        "en el menú principal.",
         reply_markup=settings_menu(workspace.auto_approve),
     )
 

@@ -82,6 +82,7 @@ class Channel(Base):
     )
     title: Mapped[str] = mapped_column(String(255))
     username: Mapped[str | None] = mapped_column(String(64))
+    chat_type: Mapped[str] = mapped_column(String(20), default="channel")
     status: Mapped[ChannelStatus] = mapped_column(
         Enum(ChannelStatus, name="channel_status_enum"), default=ChannelStatus.active
     )
@@ -180,20 +181,65 @@ class JoinRequirement(Base):
     )
 
 
-class RequirementChat(Base):
-    __tablename__ = "requirement_chats"
-    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+class RelayRule(Base):
+    __tablename__ = "relay_rules"
+    __table_args__ = (UniqueConstraint("source_chat_id", name="uq_relay_rule_source_chat"),)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
-    title: Mapped[str] = mapped_column(String(255))
-    username: Mapped[str | None] = mapped_column(String(64))
-    chat_type: Mapped[str] = mapped_column(String(20))
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-    can_invite_users: Mapped[bool] = mapped_column(Boolean, default=False)
-    added_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    source_chat_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    creator_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    destinations: Mapped[list["RelayDestination"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class RelayDestination(Base):
+    __tablename__ = "relay_destinations"
+    __table_args__ = (
+        UniqueConstraint(
+            "relay_rule_id", "destination_chat_id", name="uq_relay_destination_rule_chat"
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    relay_rule_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relay_rules.id", ondelete="CASCADE"), index=True
+    )
+    destination_chat_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+
+
+class RelayDelivery(Base):
+    __tablename__ = "relay_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "relay_rule_id",
+            "source_message_id",
+            "destination_chat_id",
+            name="uq_relay_delivery_message_destination",
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    relay_rule_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("relay_rules.id", ondelete="CASCADE"), index=True
+    )
+    source_message_id: Mapped[int] = mapped_column(BigInteger)
+    destination_chat_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    succeeded: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Publication(Base):

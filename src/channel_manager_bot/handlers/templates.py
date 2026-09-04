@@ -52,7 +52,7 @@ async def show_template(callback: CallbackQuery, template: ContentTemplate) -> N
         f"📝 {preview}\n"
         f"🔗 <b>Botones:</b> {len(template.buttons)}\n"
         f"🗑 <b>Autoeliminación:</b> {ttl_label(template.delete_after_minutes)}\n\n"
-        "🔁 La recurrencia se elige después de seleccionar los canales.",
+        "🔁 La recurrencia se elige después de seleccionar los destinos.",
         reply_markup=template_detail_menu(
             template.id, len(template.buttons), template.delete_after_minutes
         ),
@@ -352,7 +352,9 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
             return
         channels = await get_active_channels(session, template.workspace_id)
         if not channels:
-            await callback.answer("Primero conecta al menos un canal.", show_alert=True)
+            await callback.answer(
+                "Primero conecta al menos un canal o grupo.", show_alert=True
+            )
             return
         publication = Publication(
             workspace_id=template.workspace_id,
@@ -380,7 +382,8 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(PublicationFlow.selecting_channels)
     await callback.message.edit_text(
         f"🚀 <b>Usar plantilla: {escape(template.name)}</b>\n\n"
-        "Elige los canales de destino. Después podrás publicarla una vez o hacerla recurrente.",
+        "Elige los canales o grupos de destino. Después podrás publicarla una vez o hacerla "
+        "recurrente.",
         reply_markup=channel_selector(publication.id, channels, set()),
     )
     await callback.answer()

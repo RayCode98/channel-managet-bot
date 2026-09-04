@@ -6,7 +6,15 @@ from sqlalchemy import func, select
 
 from ..database import SessionFactory
 from ..keyboards import back_home
-from ..models import Channel, JoinRequestEvent, Publication, PublicationStatus, PublishedMessage
+from ..models import (
+    Channel,
+    JoinRequestEvent,
+    Publication,
+    PublicationStatus,
+    PublishedMessage,
+    RelayDelivery,
+    RelayRule,
+)
 from ..repository import get_active_channels, get_workspace
 from ..services.channel_sync import refresh_channels
 
@@ -59,17 +67,38 @@ async def show_stats(callback: CallbackQuery, bot: Bot) -> None:
             .join(Channel, Channel.telegram_chat_id == JoinRequestEvent.channel_id)
             .where(Channel.workspace_id == workspace.id)
         )
+        relay_successful = await session.scalar(
+            select(func.count())
+            .select_from(RelayDelivery)
+            .join(RelayRule, RelayRule.id == RelayDelivery.relay_rule_id)
+            .where(
+                RelayRule.workspace_id == workspace.id,
+                RelayDelivery.succeeded.is_(True),
+            )
+        )
+        relay_failed = await session.scalar(
+            select(func.count())
+            .select_from(RelayDelivery)
+            .join(RelayRule, RelayRule.id == RelayDelivery.relay_rule_id)
+            .where(
+                RelayRule.workspace_id == workspace.id,
+                RelayDelivery.succeeded.is_(False),
+                RelayDelivery.error.is_not(None),
+            )
+        )
     lines.extend(
         [
             "",
             f"👥 <b>Total visible:</b> {total_members:,}",
             f"📝 <b>Publicaciones terminadas:</b> {published or 0}",
             f"✅ <b>Entregas exitosas:</b> {successful_deliveries or 0}",
+            f"↪️ <b>Reenvíos exitosos:</b> {relay_successful or 0}",
+            f"⚠️ <b>Reenvíos fallidos:</b> {relay_failed or 0}",
             f"🙋 <b>Solicitudes registradas:</b> {joins or 0}",
             "",
             "El cambio entre paréntesis se calcula desde la sincronización anterior.",
         ]
     )
     if summary.failed:
-        lines.append(f"⚠️ {summary.failed} canal(es) no pudieron actualizarse temporalmente.")
+        lines.append(f"⚠️ {summary.failed} chat(s) no pudieron actualizarse temporalmente.")
     await callback.message.edit_text("\n".join(lines), reply_markup=back_home())

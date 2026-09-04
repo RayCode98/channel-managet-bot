@@ -27,9 +27,9 @@ async def choose_feature_channel(callback: CallbackQuery) -> None:
         workspace = await get_workspace(session, callback.from_user.id)
         channels = await get_active_channels(session, workspace.id) if workspace else []
     icon, title, action = feature
-    text = f"{icon} <b>{title}</b>\n\nSelecciona el canal donde deseas {action}."
+    text = f"{icon} <b>{title}</b>\n\nSelecciona el canal o grupo donde deseas {action}."
     if not channels:
-        text += "\n\nTodavía no tienes canales activos. Agrégalos desde <b>Mis canales</b>."
+        text += "\n\nTodavía no tienes chats activos. Agrégalos desde <b>Canales y grupos</b>."
     await callback.message.edit_text(
         text,
         reply_markup=feature_channels_menu(channels, kind),

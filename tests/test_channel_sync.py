@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from aiogram.enums import ChatMemberStatus
+from aiogram.enums import ChatMemberStatus, ChatType
 
 from channel_manager_bot.models import Channel, ChannelStatus
 from channel_manager_bot.services.channel_sync import (
@@ -26,6 +26,15 @@ def test_membership_access_requires_admin_post_permission():
     assert membership_access(missing) == (ChannelStatus.missing_permissions, False)
 
 
+def test_group_admin_can_publish_without_channel_specific_permission():
+    admin = SimpleNamespace(
+        status=ChatMemberStatus.ADMINISTRATOR,
+        can_post_messages=False,
+    )
+
+    assert membership_access(admin, "supergroup") == (ChannelStatus.active, True)
+
+
 def test_membership_capabilities_reads_join_filter_permissions():
     member = SimpleNamespace(
         status=ChatMemberStatus.ADMINISTRATOR,
@@ -40,7 +49,11 @@ class FakeBot:
     id = 777
 
     async def get_chat(self, channel_id):
-        return SimpleNamespace(title="Nombre actualizado", username="canal_nuevo")
+        return SimpleNamespace(
+            title="Nombre actualizado",
+            username="canal_nuevo",
+            type=ChatType.CHANNEL,
+        )
 
     async def get_chat_member(self, channel_id, user_id):
         assert user_id == self.id
@@ -76,6 +89,7 @@ async def test_fetch_and_apply_channel_snapshot_updates_current_information():
     assert channel.last_checked_at is not None
     assert channel.can_invite_users
     assert channel.can_restrict_members
+    assert channel.chat_type == "channel"
 
 
 def test_unavailable_snapshot_updates_access_without_erasing_member_count():

@@ -113,7 +113,7 @@ async def receive_content(message: Message, state: FSMContext) -> None:
         publication_id = publication.id
     await state.clear()
     await message.answer(
-        "✅ Contenido guardado. Ahora puedes agregar botones o elegir los canales.",
+        "✅ Contenido guardado. Ahora puedes agregar botones o elegir los destinos.",
         reply_markup=composer_menu(publication_id, 0),
     )
 
@@ -271,7 +271,7 @@ async def choose_publication_ttl(callback: CallbackQuery) -> None:
         return
     await callback.message.edit_text(
         "🗑 <b>Autoeliminación</b>\n\n"
-        "Elige cuánto tiempo permanecerá el mensaje en cada canal después de publicarse.",
+        "Elige cuánto tiempo permanecerá el mensaje en cada destino después de publicarse.",
         reply_markup=ttl_menu("pub", publication.id),
     )
     await callback.answer()
@@ -315,11 +315,14 @@ async def choose_channels(callback: CallbackQuery, state: FSMContext) -> None:
             )
         )
     if not channels:
-        await callback.answer("Primero necesitas conectar al menos un canal.", show_alert=True)
+        await callback.answer(
+            "Primero necesitas conectar al menos un canal o grupo.", show_alert=True
+        )
         return
     await state.set_state(PublicationFlow.selecting_channels)
     await callback.message.edit_text(
-        "📢 <b>Elige los canales</b>\n\nPuedes publicar el mismo contenido en varios canales.",
+        "🎯 <b>Elige los destinos</b>\n\n"
+        "Puedes publicar el mismo contenido en varios canales y grupos.",
         reply_markup=channel_selector(publication.id, channels, selected),
     )
     await callback.answer()
@@ -342,7 +345,7 @@ async def toggle_channel(callback: CallbackQuery) -> None:
             )
         )
         if channel is None:
-            await callback.answer("Ese canal no pertenece a tu cuenta.", show_alert=True)
+            await callback.answer("Ese destino no pertenece a tu cuenta.", show_alert=True)
             return
         existing = await session.scalar(
             select(PublicationChannel).where(
@@ -415,7 +418,7 @@ async def choose_time(callback: CallbackQuery) -> None:
             else 0
         )
     if not total:
-        await callback.answer("Selecciona al menos un canal.", show_alert=True)
+        await callback.answer("Selecciona al menos un destino.", show_alert=True)
         return
     await callback.message.edit_text(
         "⏰ <b>Momento de publicación</b>\n\n"
@@ -504,7 +507,7 @@ async def choose_recurrence(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         "🔁 <b>Publicación recurrente</b>\n\n"
         "Elige cada cuántos días debe repetirse. Se conservarán el contenido, los botones, "
-        "los canales y la autoeliminación.",
+        "los destinos y la autoeliminación.",
         reply_markup=recurrence_interval_menu(publication.id),
     )
     await callback.answer()

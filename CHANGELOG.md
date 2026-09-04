@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 0.9.0
+
+- Catálogo unificado de canales, grupos y supergrupos vinculados.
+- Registro automático de cualquier chat compatible al promover el bot a administrador.
+- Publicaciones, plantillas, recurrencias, plan de contenido y estadísticas compatibles con grupos.
+- Bienvenidas, despedidas, autocompletado, firmas y filtros configurables también por grupo.
+- Nueva sección principal **Reenvío** con un origen y múltiples destinos.
+- Reenvío de canal a grupo, grupo a canal, canal a canal y grupo a grupo.
+- Copia limpia sin la etiqueta “Reenviado de”, conservando texto, formato, multimedia y álbumes.
+- Conservación de botones URL; los botones internos de otros bots no se replican.
+- Activación independiente por origen y contador de entregas correctas o fallidas.
+- Protección contra destinos duplicados, autoenvío, reenvíos duplicados y ciclos directos o indirectos.
+- Migración automática de grupos ya utilizados como requisitos de unión al catálogo unificado.
+- Migración incremental `20260904_0008`, compatible con instalaciones anteriores.
+
 ## 0.8.0
 
 - Nueva sección principal **Filtros de unión**, organizada como función → canal → opciones.

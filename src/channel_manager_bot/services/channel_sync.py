@@ -22,6 +22,7 @@ class ChannelSnapshot:
     can_post_messages: bool
     can_invite_users: bool = False
     can_restrict_members: bool = False
+    chat_type: str = "channel"
 
 
 @dataclass(frozen=True)
@@ -32,11 +33,13 @@ class RefreshSummary:
     failed: int = 0
 
 
-def membership_access(member) -> tuple[ChannelStatus, bool]:
+def membership_access(member, chat_type: str = "channel") -> tuple[ChannelStatus, bool]:
     if member.status == ChatMemberStatus.CREATOR:
         return ChannelStatus.active, True
     if member.status == ChatMemberStatus.ADMINISTRATOR:
-        can_post = bool(getattr(member, "can_post_messages", False))
+        can_post = chat_type in {"group", "supergroup"} or bool(
+            getattr(member, "can_post_messages", False)
+        )
         return (
             ChannelStatus.active if can_post else ChannelStatus.missing_permissions,
             can_post,
@@ -58,7 +61,8 @@ def membership_capabilities(member) -> tuple[bool, bool]:
 async def fetch_channel_snapshot(bot: Bot, channel_id: int) -> ChannelSnapshot:
     chat = await bot.get_chat(channel_id)
     member = await bot.get_chat_member(channel_id, bot.id)
-    status, can_post = membership_access(member)
+    chat_type = chat.type.value
+    status, can_post = membership_access(member, chat_type)
     can_invite, can_restrict = membership_capabilities(member)
     try:
         member_count = await bot.get_chat_member_count(channel_id)
@@ -73,6 +77,7 @@ async def fetch_channel_snapshot(bot: Bot, channel_id: int) -> ChannelSnapshot:
         can_post_messages=can_post,
         can_invite_users=can_invite,
         can_restrict_members=can_restrict,
+        chat_type=chat_type,
     )
 
 
@@ -80,6 +85,7 @@ def apply_channel_snapshot(channel: Channel, snapshot: ChannelSnapshot) -> None:
     if snapshot.title:
         channel.title = snapshot.title
     channel.username = snapshot.username
+    channel.chat_type = snapshot.chat_type
     if snapshot.member_count is not None:
         channel.previous_member_count = channel.member_count
         channel.member_count = snapshot.member_count

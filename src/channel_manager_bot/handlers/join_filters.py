@@ -20,7 +20,6 @@ from ..models import (
     ChannelStatus,
     JoinNameScript,
     JoinRequirement,
-    RequirementChat,
 )
 from ..repository import get_active_channels, get_workspace, utcnow
 from ..services.join_filters import SCRIPT_LABELS
@@ -225,37 +224,21 @@ async def show_force_targets(callback: CallbackQuery) -> None:
             else None
         )
         channels = await get_active_channels(session, workspace.id) if workspace else []
-        groups = (
-            list(
-                await session.scalars(
-                    select(RequirementChat)
-                    .where(
-                        RequirementChat.workspace_id == workspace.id,
-                        RequirementChat.active.is_(True),
-                    )
-                    .order_by(RequirementChat.title)
-                )
-            )
-            if workspace
-            else []
-        )
     if source is None:
         await callback.answer("Canal no encontrado.", show_alert=True)
         return
-    available = len(
-        [item for item in channels if item.telegram_chat_id != source_channel_id]
-    ) + len(groups)
+    available = len([item for item in channels if item.telegram_chat_id != source_channel_id])
     text = (
         f"🎯 <b>Destino requerido para {escape(source.title)}</b>\n\n"
         "Elige el canal o grupo al que deberán unirse los solicitantes.\n\n"
-        "Para agregar un grupo a esta lista, añade el bot como administrador del grupo y "
-        "concede <b>Invitar usuarios</b>. Los canales conectados aparecen automáticamente."
+        "Para agregar un destino a esta lista, añade el bot como administrador del canal o "
+        "grupo. Si es privado, concede <b>Invitar usuarios</b>."
     )
     if not available:
         text += "\n\n⚠️ No hay otro canal ni grupo disponible todavía."
     await callback.message.edit_text(
         text,
-        reply_markup=force_target_menu(source_channel_id, channels, groups),
+        reply_markup=force_target_menu(source_channel_id, channels),
     )
     await callback.answer()
 
@@ -275,22 +258,13 @@ async def select_force_target(callback: CallbackQuery) -> None:
         if workspace is None or source is None:
             await callback.answer("Canal no encontrado.", show_alert=True)
             return
-        if target_kind == "c":
-            target = await session.scalar(
-                select(Channel).where(
-                    Channel.telegram_chat_id == target_id,
-                    Channel.workspace_id == workspace.id,
-                    Channel.status == ChannelStatus.active,
-                )
+        target = await session.scalar(
+            select(Channel).where(
+                Channel.telegram_chat_id == target_id,
+                Channel.workspace_id == workspace.id,
+                Channel.status == ChannelStatus.active,
             )
-        else:
-            target = await session.scalar(
-                select(RequirementChat).where(
-                    RequirementChat.telegram_chat_id == target_id,
-                    RequirementChat.workspace_id == workspace.id,
-                    RequirementChat.active.is_(True),
-                )
-            )
+        )
         if target is None:
             await callback.answer("Destino no disponible.", show_alert=True)
             return
@@ -334,9 +308,9 @@ async def select_force_target(callback: CallbackQuery) -> None:
         title = target_chat.title or target.title
         target.title = title
         target.username = target_chat.username
-        if isinstance(target, RequirementChat):
-            target.can_invite_users = target_can_invite
-            target.last_checked_at = utcnow()
+        target.chat_type = target_chat.type.value
+        target.can_invite_users = target_can_invite
+        target.last_checked_at = utcnow()
         requirement = await session.get(JoinRequirement, source_id)
         if requirement is None:
             requirement = JoinRequirement(channel_id=source_id)

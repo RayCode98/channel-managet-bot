@@ -81,7 +81,7 @@ async def render_plan(callback: CallbackQuery, page: int) -> None:
                 else ""
             )
             lines.append(
-                f"• {local_time:%H:%M} · {channels} canal(es) · elimina: {ttl}{recurrence}\n"
+                f"• {local_time:%H:%M} · {channels} destino(s) · elimina: {ttl}{recurrence}\n"
                 f"  {preview}"
             )
         lines.append("")

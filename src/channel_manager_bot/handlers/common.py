@@ -24,7 +24,7 @@ async def start(message: Message, state: FSMContext) -> None:
         workspace = await ensure_user_workspace(session, message.from_user)
     await message.answer(
         f"👋 <b>Bienvenido a {workspace.name}</b>\n\n"
-        "Desde aquí puedes administrar canales, preparar contenido y revisar resultados.",
+        "Desde aquí puedes administrar canales y grupos, preparar contenido y revisar resultados.",
         reply_markup=main_menu(),
     )
 

@@ -72,7 +72,7 @@ async def ask_farewell_content(callback: CallbackQuery, state: FSMContext) -> No
         "Puede ser texto enriquecido, foto, video, animación, audio, voz o documento.\n\n"
         "Variables disponibles:\n"
         "• <code>{nombre}</code>: nombre de la persona que salió.\n"
-        "• <code>{canal}</code>: nombre del canal.\n\n"
+        "• <code>{canal}</code>: nombre del canal o grupo.\n\n"
         "Ejemplo: <code>Hasta pronto, {nombre}. Gracias por haber formado parte de {canal}.</code>"
     )
     await callback.answer()
@@ -316,7 +316,9 @@ async def clear_farewell(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.chat_member(F.chat.type == ChatType.CHANNEL)
+@router.chat_member(
+    F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
+)
 async def member_left_channel(event: ChatMemberUpdated, bot: Bot) -> None:
     departed_user = event.new_chat_member.user
     if not is_voluntary_channel_departure(event):

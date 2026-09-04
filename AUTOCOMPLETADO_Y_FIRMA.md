@@ -1,6 +1,6 @@
-# Autocompletado y firma por canal
+# Autocompletado y firma por canal o grupo
 
-Estas funciones aplican textos automáticos a las publicaciones según el canal de destino. No utilizan inteligencia artificial.
+Estas funciones aplican textos automáticos a las publicaciones según el canal o grupo de destino. No utilizan inteligencia artificial.
 
 ## Reglas
 
@@ -16,17 +16,16 @@ El autocompletado nunca reemplaza una descripción existente. La firma siempre o
 
 ## Configuración desde Telegram
 
-1. Abre **Mis canales**.
-2. Selecciona el canal.
-3. Entra en **Autocompletado** o **Firma**.
-4. Envía el texto con el formato que deseas conservar.
-5. Usa **Vista previa** para comprobar el resultado.
+1. Abre **Autocompletado** o **Firmas** desde el menú principal.
+2. Selecciona el canal o grupo.
+3. Envía el texto con el formato que deseas conservar.
+4. Usa **Vista previa** para comprobar el resultado.
 
 Cada opción permite actualizar el texto, activarlo o desactivarlo temporalmente y borrarlo. El límite es de 500 unidades de texto de Telegram por configuración.
 
 ## Publicaciones con varios destinos
 
-Las reglas se calculan al momento del envío para cada canal. Por ejemplo, una foto sin descripción puede recibir un texto y una firma en el canal A, otra firma en el canal B y permanecer sin descripción en el canal C.
+Las reglas se calculan al momento del envío para cada destino. Por ejemplo, una foto sin descripción puede recibir un texto y una firma en el canal A, otra firma en el grupo B y permanecer sin descripción en el canal C.
 
 Las publicaciones recurrentes consultan la configuración actual en cada ejecución. Si la firma cambia hoy, la siguiente repetición utilizará la firma nueva.
 
