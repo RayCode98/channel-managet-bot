@@ -21,6 +21,10 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Personalización de bienvenidas con `{nombre}` y `{canal}`, colores y vista previa.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
+- Vista previa exacta de plantillas antes de utilizarlas.
+- Eliminación individual de botones en bienvenidas, plantillas y publicaciones en preparación.
+- Publicaciones recurrentes cada 1 a 365 días, con inicio inmediato o programado.
+- Recurrencia disponible al crear desde cero o al utilizar una plantilla.
 - Autoeliminación de publicaciones entre 1 hora y 7 días.
 - Reintentos persistentes cuando una eliminación falla temporalmente.
 - Conteo de miembros, variación entre consultas, solicitudes y entregas.
@@ -91,11 +95,13 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si ya utilizas v0.2.x, sigue [`UPGRADE_V0.3.0.md`](UPGRADE_V0.3.0.md). La migración `20260902_0003` conserva las bienvenidas y los botones anteriores.
+Si ya utilizas v0.2.x o v0.3.x, sigue [`UPGRADE_V0.4.0.md`](UPGRADE_V0.4.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Cómo funciona la programación
 
 El bot guarda la publicación original, los canales elegidos, los botones y la fecha en PostgreSQL. El `worker` reclama cada trabajo con `FOR UPDATE SKIP LOCKED`, lo que evita que dos procesos publiquen lo mismo. Si un proceso se interrumpe, los trabajos bloqueados durante más de cinco minutos regresan a la cola.
+
+En una recurrencia solamente se conserva la siguiente ejecución futura. Cuando termina, el worker crea la próxima con la misma configuración. La serie continúa hasta que el usuario la detiene desde el Plan de contenido. Si el servidor estuvo apagado, las ejecuciones vencidas se omiten para evitar una ráfaga de publicaciones atrasadas.
 
 ## Bienvenidas y limitación de Telegram
 
@@ -132,7 +138,7 @@ src/channel_manager_bot/
 1. Invitaciones para agregar colaboradores y cambiar roles.
 2. Planes, límites y renovaciones por cliente.
 3. Campañas con enlaces de invitación nombrados y estadísticas por enlace.
-4. Publicaciones recurrentes, plantillas, duplicación y papelera.
+4. Duplicación rápida de publicaciones y papelera recuperable.
 5. Edición/eliminación sincronizada de mensajes ya publicados.
 6. Álbumes multimedia y botones en varias columnas desde el asistente.
 7. Exportación CSV y respaldo programado.

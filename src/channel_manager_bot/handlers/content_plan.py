@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import func, select
 
 from ..database import SessionFactory
-from ..keyboards import ttl_label
+from ..keyboards import recurrence_label, ttl_label
 from ..models import Publication, PublicationChannel, PublicationStatus
 from ..repository import get_workspace
 
@@ -75,8 +75,14 @@ async def render_plan(callback: CallbackQuery, page: int) -> None:
             )
             channels = channel_counts[publication.id]
             ttl = ttl_label(publication.delete_after_minutes)
+            recurrence = (
+                f" · 🔁 {recurrence_label(publication.recurrence_interval_days)}"
+                if publication.recurrence_interval_days
+                else ""
+            )
             lines.append(
-                f"• {local_time:%H:%M} · {channels} canal(es) · elimina: {ttl}\n  {preview}"
+                f"• {local_time:%H:%M} · {channels} canal(es) · elimina: {ttl}{recurrence}\n"
+                f"  {preview}"
             )
         lines.append("")
     lines.append(f"Página {page + 1}/{total_pages} · {total} programada(s)")
@@ -85,7 +91,8 @@ async def render_plan(callback: CallbackQuery, page: int) -> None:
         [
             InlineKeyboardButton(
                 text=(
-                    f"❌ {local_time:%d/%m %H:%M} · "
+                    f"{'⏹' if publication.recurrence_interval_days else '❌'} "
+                    f"{local_time:%d/%m %H:%M} · "
                     f"{(publication.preview or 'Multimedia').replace(chr(10), ' ')[:24]}"
                 ),
                 callback_data=f"plan:cancel:{publication.id}:{page}",
@@ -144,7 +151,8 @@ async def cancel_planned(callback: CallbackQuery) -> None:
         if publication is None:
             await callback.answer("La publicación ya no está programada.", show_alert=True)
             return
+        was_recurring = bool(publication.recurrence_interval_days)
         publication.status = PublicationStatus.cancelled
         await session.commit()
     await render_plan(callback, int(page_text))
-    await callback.answer("Publicación cancelada")
+    await callback.answer("Recurrencia detenida" if was_recurring else "Publicación cancelada")

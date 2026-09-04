@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
 from sqlalchemy import select
 
 from ..database import SessionFactory
-from ..keyboards import back_home, channel_detail_menu, channels_menu
+from ..keyboards import back_home, channel_detail_menu, channels_menu, welcome_buttons_menu
 from ..models import AuditLog, Channel, ChannelStatus, Membership, WelcomeButton
 from ..repository import (
     can_add_channel,
@@ -205,6 +205,76 @@ async def receive_welcome_buttons(message: Message, state: FSMContext) -> None:
         f"✅ Botones actualizados: <b>{len(parsed_buttons)}</b>.",
         reply_markup=channel_detail_menu(channel),
     )
+
+
+@router.callback_query(F.data.startswith("welcome:manage:"))
+async def manage_welcome_buttons(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.welcome_buttons:
+        await callback.answer("La bienvenida no tiene botones.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"🧹 <b>Botones de {escape(channel.title)}</b>\n\n"
+        "Pulsa el botón que deseas eliminar. Los demás permanecerán sin cambios.",
+        reply_markup=welcome_buttons_menu(channel.telegram_chat_id, channel.welcome_buttons),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("welcome:bdel:"))
+async def delete_welcome_button(callback: CallbackQuery) -> None:
+    try:
+        button_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        button = await session.scalar(
+            select(WelcomeButton)
+            .join(Channel, Channel.telegram_chat_id == WelcomeButton.channel_id)
+            .where(
+                WelcomeButton.id == button_id,
+                Channel.workspace_id == workspace.id,
+                Channel.status == ChannelStatus.active,
+            )
+        )
+        if button is None:
+            await callback.answer("Botón no encontrado.", show_alert=True)
+            return
+        channel_id = button.channel_id
+        await session.delete(button)
+        await session.flush()
+        remaining = list(
+            await session.scalars(
+                select(WelcomeButton)
+                .where(WelcomeButton.channel_id == channel_id)
+                .order_by(WelcomeButton.row_index, WelcomeButton.position)
+            )
+        )
+        for row_index, remaining_button in enumerate(remaining):
+            remaining_button.row_index = row_index
+            remaining_button.position = 0
+        await session.commit()
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("El canal ya no está disponible.", show_alert=True)
+        return
+    if channel.welcome_buttons:
+        await callback.message.edit_reply_markup(
+            reply_markup=welcome_buttons_menu(channel.telegram_chat_id, channel.welcome_buttons)
+        )
+    else:
+        await callback.message.edit_text(
+            f"⚙️ <b>{escape(channel.title)}</b>\n\nLa bienvenida quedó sin botones.",
+            reply_markup=channel_detail_menu(channel),
+        )
+    await callback.answer("Botón eliminado")
 
 
 @router.callback_query(F.data.startswith("welcome:preview:"))

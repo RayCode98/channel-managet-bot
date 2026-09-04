@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 0.4.0
+
+- Vista previa exacta de plantillas con contenido, multimedia y botones.
+- Administración y eliminación individual de botones en bienvenidas, plantillas y borradores.
+- Publicaciones recurrentes cada 1, 2, 3, 7, 14 o 30 días.
+- Intervalo recurrente personalizado de 1 a 365 días.
+- Inicio inmediato o elección de la primera fecha para una recurrencia.
+- Repetición disponible tanto para publicaciones nuevas como para publicaciones creadas desde plantillas.
+- Conservación de contenido, canales, botones y autoeliminación en cada ejecución.
+- Una sola ejecución futura por serie para mantener limpio el Plan de contenido.
+- Las fechas vencidas durante una interrupción se omiten para evitar envíos masivos atrasados.
+- Conservación de la hora local del cliente, incluso en zonas con cambio estacional.
+- Migración incremental `20260903_0004` compatible con datos anteriores.
+
 ## 0.3.0
 
 - Bienvenidas con hasta 20 botones, uno por cada línea de configuración.

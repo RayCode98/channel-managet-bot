@@ -4,7 +4,7 @@ from collections import defaultdict
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from .models import Channel, PublicationButton, TemplateButton
+from .models import Channel, PublicationButton, TemplateButton, WelcomeButton
 
 
 def ttl_label(minutes: int | None) -> str:
@@ -17,6 +17,14 @@ def ttl_label(minutes: int | None) -> str:
         10080: "7 días",
     }
     return labels.get(minutes, "No")
+
+
+def recurrence_label(days: int | None) -> str:
+    if not days:
+        return "Una sola vez"
+    if days == 1:
+        return "Cada día"
+    return f"Cada {days} días"
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -78,6 +86,18 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
                 [
                     [
                         InlineKeyboardButton(
+                            text="🧹 Administrar botones",
+                            callback_data=f"welcome:manage:{channel.telegram_chat_id}",
+                        )
+                    ]
+                ]
+                if channel.welcome_buttons
+                else []
+            ),
+            *(
+                [
+                    [
+                        InlineKeyboardButton(
                             text="👁 Vista previa",
                             callback_data=f"welcome:preview:{channel.telegram_chat_id}",
                         )
@@ -109,6 +129,21 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
     )
 
 
+def welcome_buttons_menu(channel_id: int, buttons: list[WelcomeButton]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 {button.text}"[:64], callback_data=f"welcome:bdel:{button.id}"
+            )
+        ]
+        for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ Volver al canal", callback_data=f"channel:open:{channel_id}")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def composer_menu(
     publication_id: uuid.UUID, button_count: int, delete_after_minutes: int | None = None
 ) -> InlineKeyboardMarkup:
@@ -117,6 +152,14 @@ def composer_menu(
     if button_count < 20:
         rows.append(
             [InlineKeyboardButton(text="➕ Agregar botón", callback_data=f"pub:button:{short_id}")]
+        )
+    if button_count:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧹 Administrar botones", callback_data=f"pub:buttons:{short_id}"
+                )
+            ]
         )
     rows.extend(
         [
@@ -194,7 +237,67 @@ def timing_menu(publication_id: uuid.UUID) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="🔁 Programar recurrente", callback_data=f"pub:repeat:{publication_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="❌ Cancelar", callback_data=f"pub:cancel:{publication_id}"
+                )
+            ],
+        ]
+    )
+
+
+def recurrence_interval_menu(publication_id: uuid.UUID) -> InlineKeyboardMarkup:
+    choices = [
+        ("Cada día", 1),
+        ("Cada 2 días", 2),
+        ("Cada 3 días", 3),
+        ("Cada semana", 7),
+        ("Cada 2 semanas", 14),
+        ("Cada 30 días", 30),
+    ]
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"pub:setrepeat:{publication_id}:{days}",
+            )
+        ]
+        for label, days in choices
+    ]
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text="✏️ Otro intervalo", callback_data=f"pub:repeatcustom:{publication_id}"
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ Volver", callback_data=f"pub:time:{publication_id}")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def recurrence_start_menu(publication_id: uuid.UUID, days: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚀 Comenzar ahora",
+                    callback_data=f"pub:repeatnow:{publication_id}:{days}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗓 Elegir primera fecha",
+                    callback_data=f"pub:repeatdate:{publication_id}:{days}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Cambiar intervalo", callback_data=f"pub:repeat:{publication_id}"
                 )
             ],
         ]
@@ -239,13 +342,22 @@ def template_detail_menu(
     template_id: uuid.UUID, button_count: int, delete_after_minutes: int | None
 ) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text="🚀 Usar plantilla", callback_data=f"tpl:use:{template_id}")]
+        [InlineKeyboardButton(text="🚀 Usar plantilla", callback_data=f"tpl:use:{template_id}")],
+        [InlineKeyboardButton(text="👁 Vista previa", callback_data=f"tpl:preview:{template_id}")],
     ]
     if button_count < 20:
         rows.append(
             [
                 InlineKeyboardButton(
                     text="➕ Agregar botón", callback_data=f"tpl:button:{template_id}"
+                )
+            ]
+        )
+    if button_count:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧹 Administrar botones", callback_data=f"tpl:buttons:{template_id}"
                 )
             ]
         )
@@ -263,6 +375,40 @@ def template_detail_menu(
                 )
             ],
             [InlineKeyboardButton(text="⬅️ Plantillas", callback_data="tpl:list")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def template_buttons_menu(
+    template_id: uuid.UUID, buttons: list[TemplateButton]
+) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=f"🗑 {button.text}"[:64], callback_data=f"tpl:bdel:{button.id}")]
+        for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver a la plantilla", callback_data=f"tpl:open:{template_id}"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def publication_buttons_menu(
+    publication_id: uuid.UUID, buttons: list[PublicationButton]
+) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=f"🗑 {button.text}"[:64], callback_data=f"pub:bdel:{button.id}")]
+        for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver a la publicación", callback_data=f"pub:edit:{publication_id}"
+            )
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -12,13 +12,79 @@ from ..models import (
     Channel,
     ChannelStatus,
     Publication,
+    PublicationButton,
     PublicationChannel,
     PublicationStatus,
     PublishedMessage,
 )
 from ..repository import utcnow
+from .recurrence import next_recurrence_at
 
 logger = logging.getLogger(__name__)
+
+
+async def create_next_recurrence(
+    session,
+    publication: Publication,
+    channel_ids: list[int],
+) -> Publication | None:
+    if not (
+        publication.recurrence_series_id
+        and publication.recurrence_interval_days
+        and publication.recurrence_sequence
+        and publication.scheduled_at
+    ):
+        return None
+
+    next_sequence = publication.recurrence_sequence + 1
+    existing = await session.scalar(
+        select(Publication.id).where(
+            Publication.recurrence_series_id == publication.recurrence_series_id,
+            Publication.recurrence_sequence == next_sequence,
+        )
+    )
+    if existing:
+        return None
+
+    next_publication = Publication(
+        workspace_id=publication.workspace_id,
+        creator_user_id=publication.creator_user_id,
+        source_chat_id=publication.source_chat_id,
+        source_message_id=publication.source_message_id,
+        preview=publication.preview,
+        status=PublicationStatus.scheduled,
+        scheduled_at=next_recurrence_at(
+            publication.scheduled_at,
+            publication.recurrence_interval_days,
+            now=utcnow(),
+            timezone_name=publication.recurrence_timezone or "UTC",
+        ),
+        delete_after_minutes=publication.delete_after_minutes,
+        recurrence_series_id=publication.recurrence_series_id,
+        recurrence_interval_days=publication.recurrence_interval_days,
+        recurrence_sequence=next_sequence,
+        recurrence_timezone=publication.recurrence_timezone,
+    )
+    session.add(next_publication)
+    await session.flush()
+    for button in publication.buttons:
+        session.add(
+            PublicationButton(
+                publication_id=next_publication.id,
+                row_index=button.row_index,
+                position=button.position,
+                text=button.text,
+                url=button.url,
+            )
+        )
+    for channel_id in channel_ids:
+        session.add(
+            PublicationChannel(
+                publication_id=next_publication.id,
+                channel_id=channel_id,
+            )
+        )
+    return next_publication
 
 
 async def recover_stale_jobs() -> int:
@@ -145,12 +211,15 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
         else:
             publication.status = PublicationStatus.failed
         publication.claimed_at = None
+        next_publication = await create_next_recurrence(session, publication, channel_ids)
         await session.commit()
 
         try:
+            next_text = "\n🔁 La siguiente repetición quedó programada." if next_publication else ""
             await bot.send_message(
                 publication.creator_user_id,
-                f"📬 Publicación terminada: <b>{successes}/{len(channels)}</b> entregas exitosas.",
+                f"📬 Publicación terminada: <b>{successes}/{len(channels)}</b> entregas exitosas."
+                f"{next_text}",
             )
         except TelegramAPIError as exc:
             logger.info("Could not notify publication creator: %s", exc)

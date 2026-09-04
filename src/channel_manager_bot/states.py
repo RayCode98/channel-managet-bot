@@ -7,6 +7,8 @@ class PublicationFlow(StatesGroup):
     waiting_button_url = State()
     selecting_channels = State()
     waiting_schedule = State()
+    waiting_recurrence_interval = State()
+    waiting_recurrence_schedule = State()
 
 
 class ChannelWelcomeFlow(StatesGroup):

@@ -1,8 +1,10 @@
+import logging
 import uuid
 from html import escape
 
 from aiogram import F, Router
 from aiogram.enums import ChatType
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import func, select
@@ -12,6 +14,8 @@ from ..database import SessionFactory
 from ..keyboards import (
     back_home,
     channel_selector,
+    publication_markup,
+    template_buttons_menu,
     template_detail_menu,
     templates_menu,
     ttl_label,
@@ -22,6 +26,7 @@ from ..repository import get_active_channels, get_workspace
 from ..states import PublicationFlow, TemplateFlow
 
 router = Router(name="templates")
+logger = logging.getLogger(__name__)
 
 
 async def owned_template(session, template_id: str, user_id: int) -> ContentTemplate | None:
@@ -45,7 +50,8 @@ async def show_template(callback: CallbackQuery, template: ContentTemplate) -> N
         f"🧩 <b>{escape(template.name)}</b>\n\n"
         f"📝 {preview}\n"
         f"🔗 <b>Botones:</b> {len(template.buttons)}\n"
-        f"🗑 <b>Autoeliminación:</b> {ttl_label(template.delete_after_minutes)}",
+        f"🗑 <b>Autoeliminación:</b> {ttl_label(template.delete_after_minutes)}\n\n"
+        "🔁 La recurrencia se elige después de seleccionar los canales.",
         reply_markup=template_detail_menu(
             template.id, len(template.buttons), template.delete_after_minutes
         ),
@@ -150,6 +156,28 @@ async def open_template(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("tpl:preview:"))
+async def preview_template(callback: CallbackQuery) -> None:
+    template_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        template = await owned_template(session, template_id, callback.from_user.id)
+    if template is None:
+        await callback.answer("Plantilla no encontrada.", show_alert=True)
+        return
+    try:
+        await callback.bot.copy_message(
+            chat_id=callback.from_user.id,
+            from_chat_id=template.source_chat_id,
+            message_id=template.source_message_id,
+            reply_markup=publication_markup(template.buttons),
+        )
+    except TelegramAPIError as exc:
+        logger.warning("Could not preview template %s: %s", template.id, exc)
+        await callback.answer("Telegram no pudo generar la vista previa.", show_alert=True)
+        return
+    await callback.answer("Vista previa enviada")
+
+
 @router.callback_query(F.data.startswith("tpl:button:"))
 async def ask_template_button(callback: CallbackQuery, state: FSMContext) -> None:
     template_id = callback.data.rsplit(":", 1)[1]
@@ -212,6 +240,72 @@ async def receive_template_button_url(message: Message, state: FSMContext) -> No
         "✅ Botón añadido a la plantilla.",
         reply_markup=template_detail_menu(template.id, button_count, template.delete_after_minutes),
     )
+
+
+@router.callback_query(F.data.startswith("tpl:buttons:"))
+async def manage_template_buttons(callback: CallbackQuery) -> None:
+    template_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        template = await owned_template(session, template_id, callback.from_user.id)
+    if template is None:
+        await callback.answer("Plantilla no encontrada.", show_alert=True)
+        return
+    if not template.buttons:
+        await callback.answer("Esta plantilla no tiene botones.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"🧹 <b>Botones de {escape(template.name)}</b>\n\n"
+        "Pulsa el botón que deseas eliminar. Los demás permanecerán sin cambios.",
+        reply_markup=template_buttons_menu(template.id, template.buttons),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("tpl:bdel:"))
+async def delete_template_button(callback: CallbackQuery) -> None:
+    try:
+        button_id = uuid.UUID(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        button = await session.scalar(
+            select(TemplateButton)
+            .join(ContentTemplate, ContentTemplate.id == TemplateButton.template_id)
+            .where(
+                TemplateButton.id == button_id,
+                ContentTemplate.workspace_id == workspace.id,
+            )
+        )
+        if button is None:
+            await callback.answer("Botón no encontrado.", show_alert=True)
+            return
+        template_id = button.template_id
+        await session.delete(button)
+        await session.flush()
+        remaining = list(
+            await session.scalars(
+                select(TemplateButton)
+                .where(TemplateButton.template_id == template_id)
+                .order_by(TemplateButton.row_index, TemplateButton.position)
+            )
+        )
+        for row_index, remaining_button in enumerate(remaining):
+            remaining_button.row_index = row_index
+            remaining_button.position = 0
+        await session.commit()
+        template = await owned_template(session, str(template_id), callback.from_user.id)
+    if template is None:
+        await callback.answer("La plantilla ya no está disponible.", show_alert=True)
+        return
+    if template.buttons:
+        await callback.message.edit_reply_markup(
+            reply_markup=template_buttons_menu(template.id, template.buttons)
+        )
+    else:
+        await show_template(callback, template)
+    await callback.answer("Botón eliminado")
 
 
 @router.callback_query(F.data.startswith("tpl:ttl:"))
@@ -280,7 +374,8 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
         await session.commit()
     await state.set_state(PublicationFlow.selecting_channels)
     await callback.message.edit_text(
-        f"🚀 <b>Usar plantilla: {escape(template.name)}</b>\n\nElige los canales de destino.",
+        f"🚀 <b>Usar plantilla: {escape(template.name)}</b>\n\n"
+        "Elige los canales de destino. Después podrás publicarla una vez o hacerla recurrente.",
         reply_markup=channel_selector(publication.id, channels, set()),
     )
     await callback.answer()

@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -118,6 +119,17 @@ class WelcomeButton(Base):
 
 class Publication(Base):
     __tablename__ = "publications"
+    __table_args__ = (
+        UniqueConstraint(
+            "recurrence_series_id",
+            "recurrence_sequence",
+            name="uq_publications_recurrence_series_sequence",
+        ),
+        CheckConstraint(
+            "recurrence_interval_days BETWEEN 1 AND 365",
+            name="ck_publications_recurrence_interval_days",
+        ),
+    )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
@@ -134,6 +146,10 @@ class Publication(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delete_after_minutes: Mapped[int | None] = mapped_column(Integer)
+    recurrence_series_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    recurrence_interval_days: Mapped[int | None] = mapped_column(Integer)
+    recurrence_sequence: Mapped[int | None] = mapped_column(Integer)
+    recurrence_timezone: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

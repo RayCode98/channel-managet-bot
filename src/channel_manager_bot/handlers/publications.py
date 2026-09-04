@@ -16,6 +16,10 @@ from ..keyboards import (
     channel_selector,
     composer_menu,
     main_menu,
+    publication_buttons_menu,
+    recurrence_interval_menu,
+    recurrence_label,
+    recurrence_start_menu,
     timing_menu,
     ttl_label,
     ttl_menu,
@@ -44,6 +48,21 @@ async def owned_publication(session, publication_id: str, user_id: int) -> Publi
         select(Publication)
         .options(selectinload(Publication.buttons))
         .where(Publication.id == parsed, Publication.workspace_id == workspace.id)
+    )
+
+
+async def show_publication_editor(callback: CallbackQuery, publication: Publication) -> None:
+    preview = escape((publication.preview or "Contenido multimedia").replace("\n", " ")[:200])
+    await callback.message.edit_text(
+        "📝 <b>Configurar publicación</b>\n\n"
+        f"{preview}\n\n"
+        f"🔗 <b>Botones:</b> {len(publication.buttons)}\n"
+        f"🗑 <b>Autoeliminación:</b> {ttl_label(publication.delete_after_minutes)}",
+        reply_markup=composer_menu(
+            publication.id,
+            len(publication.buttons),
+            publication.delete_after_minutes,
+        ),
     )
 
 
@@ -158,6 +177,85 @@ async def receive_button_url(message: Message, state: FSMContext) -> None:
         f"✅ Botón agregado. Total: {button_count}.",
         reply_markup=composer_menu(publication.id, button_count, publication.delete_after_minutes),
     )
+
+
+@router.callback_query(F.data.startswith("pub:edit:"))
+async def edit_publication(callback: CallbackQuery) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await show_publication_editor(callback, publication)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:buttons:"))
+async def manage_publication_buttons(callback: CallbackQuery) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    if not publication.buttons:
+        await callback.answer("Esta publicación no tiene botones.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "🧹 <b>Administrar botones</b>\n\n"
+        "Pulsa el botón que deseas eliminar. Los demás permanecerán sin cambios.",
+        reply_markup=publication_buttons_menu(publication.id, publication.buttons),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:bdel:"))
+async def delete_publication_button(callback: CallbackQuery) -> None:
+    try:
+        button_id = uuid.UUID(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        button = await session.scalar(
+            select(PublicationButton)
+            .join(Publication, Publication.id == PublicationButton.publication_id)
+            .where(
+                PublicationButton.id == button_id,
+                Publication.workspace_id == workspace.id,
+                Publication.status == PublicationStatus.draft,
+            )
+        )
+        if button is None:
+            await callback.answer("Botón no encontrado.", show_alert=True)
+            return
+        publication_id = button.publication_id
+        await session.delete(button)
+        await session.flush()
+        remaining = list(
+            await session.scalars(
+                select(PublicationButton)
+                .where(PublicationButton.publication_id == publication_id)
+                .order_by(PublicationButton.row_index, PublicationButton.position)
+            )
+        )
+        for row_index, remaining_button in enumerate(remaining):
+            remaining_button.row_index = row_index
+            remaining_button.position = 0
+        await session.commit()
+        publication = await owned_publication(session, str(publication_id), callback.from_user.id)
+    if publication is None:
+        await callback.answer("La publicación ya no está disponible.", show_alert=True)
+        return
+    if publication.buttons:
+        await callback.message.edit_reply_markup(
+            reply_markup=publication_buttons_menu(publication.id, publication.buttons)
+        )
+    else:
+        await show_publication_editor(callback, publication)
+    await callback.answer("Botón eliminado")
 
 
 @router.callback_query(F.data.startswith("pub:ttl:"))
@@ -317,21 +415,51 @@ async def choose_time(callback: CallbackQuery) -> None:
         await callback.answer("Selecciona al menos un canal.", show_alert=True)
         return
     await callback.message.edit_text(
-        "⏰ <b>Momento de publicación</b>\n\n¿Quieres enviarla ahora o programarla?",
+        "⏰ <b>Momento de publicación</b>\n\n"
+        "¿Quieres enviarla ahora, programarla una vez o hacerla recurrente?",
         reply_markup=timing_menu(publication.id),
     )
     await callback.answer()
 
 
-async def schedule_publication(publication_id: str, user_id: int, scheduled_at: datetime) -> bool:
+async def schedule_publication(
+    publication_id: str,
+    user_id: int,
+    scheduled_at: datetime,
+    recurrence_days: int | None = None,
+) -> bool:
+    if recurrence_days is not None and not 1 <= recurrence_days <= 365:
+        return False
     async with SessionFactory() as session:
         publication = await owned_publication(session, publication_id, user_id)
         if publication is None or publication.status != PublicationStatus.draft:
             return False
         publication.scheduled_at = scheduled_at
         publication.status = PublicationStatus.scheduled
+        if recurrence_days:
+            workspace = await get_workspace(session, user_id)
+            publication.recurrence_series_id = uuid.uuid4()
+            publication.recurrence_interval_days = recurrence_days
+            publication.recurrence_sequence = 1
+            publication.recurrence_timezone = workspace.timezone
         await session.commit()
         return True
+
+
+def parse_scheduled_at(value: str, timezone_name: str) -> datetime:
+    local_dt = datetime.strptime(value.strip(), "%d/%m/%Y %H:%M").replace(
+        tzinfo=ZoneInfo(timezone_name)
+    )
+    return local_dt.astimezone(UTC)
+
+
+async def show_recurrence_start(callback: CallbackQuery, publication_id: str, days: int) -> None:
+    await callback.message.edit_text(
+        f"🔁 <b>{recurrence_label(days)}</b>\n\n"
+        "Elige cuándo debe realizarse la primera publicación. La serie continuará hasta que "
+        "la detengas desde el Plan de contenido.",
+        reply_markup=recurrence_start_menu(uuid.UUID(publication_id), days),
+    )
 
 
 @router.callback_query(F.data.startswith("pub:now:"))
@@ -362,16 +490,121 @@ async def ask_schedule(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("pub:repeat:"))
+async def choose_recurrence(callback: CallbackQuery) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "🔁 <b>Publicación recurrente</b>\n\n"
+        "Elige cada cuántos días debe repetirse. Se conservarán el contenido, los botones, "
+        "los canales y la autoeliminación.",
+        reply_markup=recurrence_interval_menu(publication.id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:setrepeat:"))
+async def choose_recurrence_interval(callback: CallbackQuery) -> None:
+    _, _, publication_id, days_text = callback.data.split(":", 3)
+    days = int(days_text)
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await show_recurrence_start(callback, publication_id, days)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:repeatcustom:"))
+async def ask_custom_recurrence(callback: CallbackQuery, state: FSMContext) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await state.set_state(PublicationFlow.waiting_recurrence_interval)
+    await state.update_data(publication_id=publication_id)
+    await callback.message.answer(
+        "Escribe el número de días entre publicaciones, del <b>1 al 365</b>."
+    )
+    await callback.answer()
+
+
+@router.message(PublicationFlow.waiting_recurrence_interval, F.text)
+async def receive_custom_recurrence(message: Message, state: FSMContext) -> None:
+    try:
+        days = int(message.text.strip())
+    except ValueError:
+        days = 0
+    if not 1 <= days <= 365:
+        await message.answer("Escribe un número entero entre 1 y 365.")
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, data["publication_id"], message.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await state.clear()
+        await message.answer("La publicación ya no se puede editar.", reply_markup=main_menu())
+        return
+    await state.clear()
+    await message.answer(
+        f"🔁 <b>{recurrence_label(days)}</b>\n\n"
+        "Elige cuándo debe realizarse la primera publicación. La serie continuará hasta que "
+        "la detengas desde el Plan de contenido.",
+        reply_markup=recurrence_start_menu(publication.id, days),
+    )
+
+
+@router.callback_query(F.data.startswith("pub:repeatnow:"))
+async def start_recurrence_now(callback: CallbackQuery, state: FSMContext) -> None:
+    _, _, publication_id, days_text = callback.data.split(":", 3)
+    days = int(days_text)
+    if not await schedule_publication(
+        publication_id,
+        callback.from_user.id,
+        utcnow(),
+        recurrence_days=days,
+    ):
+        await callback.answer("No se pudo programar.", show_alert=True)
+        return
+    await state.clear()
+    await callback.message.edit_text(
+        f"🔁 <b>Recurrencia activada: {recurrence_label(days)}</b>\n\n"
+        "La primera publicación se enviará en unos segundos.",
+        reply_markup=main_menu(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:repeatdate:"))
+async def ask_recurrence_schedule(callback: CallbackQuery, state: FSMContext) -> None:
+    _, _, publication_id, days_text = callback.data.split(":", 3)
+    days = int(days_text)
+    await state.set_state(PublicationFlow.waiting_recurrence_schedule)
+    await state.update_data(publication_id=publication_id, recurrence_days=days)
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+    await callback.message.answer(
+        "Escribe la fecha y hora de la primera publicación:\n"
+        "<b>05/09/2026 18:30</b>\n\n"
+        f"Zona horaria: <code>{workspace.timezone}</code>"
+    )
+    await callback.answer()
+
+
 @router.message(PublicationFlow.waiting_schedule, F.text)
 async def receive_schedule(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with SessionFactory() as session:
         workspace = await get_workspace(session, message.from_user.id)
     try:
-        local_dt = datetime.strptime(message.text.strip(), "%d/%m/%Y %H:%M").replace(
-            tzinfo=ZoneInfo(workspace.timezone)
-        )
-        scheduled_at = local_dt.astimezone(UTC)
+        scheduled_at = parse_scheduled_at(message.text, workspace.timezone)
     except (ValueError, ZoneInfoNotFoundError):
         await message.answer("Formato inválido. Usa, por ejemplo: <b>05/09/2026 18:30</b>")
         return
@@ -385,6 +618,37 @@ async def receive_schedule(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ Programada para <b>{message.text.strip()}</b> ({workspace.timezone}).",
+        reply_markup=main_menu(),
+    )
+
+
+@router.message(PublicationFlow.waiting_recurrence_schedule, F.text)
+async def receive_recurrence_schedule(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, message.from_user.id)
+    try:
+        scheduled_at = parse_scheduled_at(message.text, workspace.timezone)
+    except (ValueError, ZoneInfoNotFoundError):
+        await message.answer("Formato inválido. Usa, por ejemplo: <b>05/09/2026 18:30</b>")
+        return
+    if scheduled_at <= utcnow():
+        await message.answer("La fecha debe estar en el futuro.")
+        return
+    days = int(data["recurrence_days"])
+    if not await schedule_publication(
+        data["publication_id"],
+        message.from_user.id,
+        scheduled_at,
+        recurrence_days=days,
+    ):
+        await state.clear()
+        await message.answer("La publicación ya no está disponible.", reply_markup=main_menu())
+        return
+    await state.clear()
+    await message.answer(
+        f"✅ Primera publicación: <b>{message.text.strip()}</b> ({workspace.timezone}).\n"
+        f"🔁 Repetición: <b>{recurrence_label(days)}</b>, hasta que la detengas.",
         reply_markup=main_menu(),
     )
 
@@ -431,6 +695,11 @@ async def list_publications(callback: CallbackQuery) -> None:
             PublicationStatus.cancelled: "Cancelada",
         }[item.status]
         preview = escape((item.preview or "Multimedia").replace("\n", " ")[:55])
-        lines.append(f"• <b>{label}</b> — {preview}")
+        recurrence = (
+            f" · 🔁 {recurrence_label(item.recurrence_interval_days)}"
+            if item.recurrence_interval_days
+            else ""
+        )
+        lines.append(f"• <b>{label}</b>{recurrence} — {preview}")
     await callback.message.edit_text("\n".join(lines), reply_markup=back_home())
     await callback.answer()
