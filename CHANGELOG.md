@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 0.10.0
+
+- Opción por cada regla de reenvío para conservar la etiqueta «Reenviado de» o publicar una copia limpia.
+- El selector del formato aparece dentro de la pantalla donde se agregan los chats de destino.
+- Nueva sección principal **Miembros**, que reemplaza a **Automatizaciones**.
+- Aprobación independiente por canal o grupo en modo manual, inmediato o por intervalos.
+- Intervalos disponibles de 1, 6, 12, 24 y 48 horas, con hasta 200 solicitudes por ejecución.
+- Botón para aprobar manualmente un lote de hasta 200 solicitudes pendientes conocidas por el bot.
+- Reclamo transaccional de solicitudes para evitar que dos workers procesen el mismo lote.
+- Los filtros de escritura y la unión obligatoria conservan prioridad sobre la aprobación general.
+- Selector de idioma persistente por espacio de trabajo con 12 idiomas frecuentes.
+- Menú principal, `/start` y navegación común traducidos, con bandera e idioma actual en el botón.
+- Nuevo texto de bienvenida de `/start`, con un resumen claro de las funciones disponibles.
+- Migración incremental `20260904_0009`, compatible con instalaciones anteriores.
+
 ## 0.9.0
 
 - Catálogo unificado de canales, grupos y supergrupos vinculados.

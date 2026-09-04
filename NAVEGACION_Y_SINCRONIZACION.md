@@ -10,10 +10,14 @@ Las configuraciones ya no están amontonadas dentro del detalle general de un ca
 4. **✍️ Firmas**
 5. **🛡 Filtros de unión**
 6. **↪️ Reenvío**
+7. **👥 Miembros**
+8. **🌐 Idioma**, con la bandera y el nombre del idioma seleccionado
 
 Al abrir una función, el bot muestra los canales y grupos activos del cliente. `✅` indica que esa función está activa en el chat y `❌` que está desactivada. Después de seleccionarlo aparecen únicamente las opciones correspondientes: configurar, vista previa, botones cuando corresponda, activar, desactivar o borrar.
 
 **Canales y grupos** muestra información general: tipo, título actual, `@usuario`, miembros, última sincronización y resumen de Bienvenida, Despedida, Autocompletado, Firma y Filtros de unión. Desde ahí se puede actualizar un chat individual o sincronizarlos todos.
+
+**Miembros** reemplaza a **Automatizaciones** y separa la aprobación de solicitudes por canal o grupo. **Idioma** cambia de forma persistente `/start`, el panel principal y la navegación común del espacio de trabajo.
 
 ## Sincronización automática
 

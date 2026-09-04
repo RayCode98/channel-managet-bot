@@ -13,6 +13,7 @@ from ..keyboards import (
     back_home,
     channel_detail_menu,
     channels_menu,
+    member_approval_label,
     welcome_buttons_menu,
     welcome_menu,
 )
@@ -103,7 +104,8 @@ def channel_detail_text(channel: Channel) -> str:
         f"🚪 <b>Despedida:</b> {farewell_status}\n"
         f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
         f"✍️ <b>Firma:</b> {signature_status}\n"
-        f"🛡 <b>Filtros de unión:</b> {join_filter_status}\n\n"
+        f"🛡 <b>Filtros de unión:</b> {join_filter_status}\n"
+        f"👥 <b>Aprobación de miembros:</b> {member_approval_label(channel)}\n\n"
         "Estas funciones se administran ahora desde sus botones independientes del menú principal."
     )
 

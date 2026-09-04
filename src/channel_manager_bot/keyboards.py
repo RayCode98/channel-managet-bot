@@ -4,6 +4,7 @@ from collections import defaultdict
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from .i18n import LANGUAGES, current_language, current_language_option, tr
 from .models import (
     Channel,
     FarewellButton,
@@ -42,27 +43,51 @@ def chat_icon(channel: Channel) -> str:
 
 def main_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 Crear publicación", callback_data="pub:new")
-    builder.button(text="🗓 Plan de contenido", callback_data="plan:page:0")
-    builder.button(text="🧩 Plantillas", callback_data="tpl:list")
-    builder.button(text="👋 Bienvenidas", callback_data="feature:channels:welcome")
-    builder.button(text="🚪 Despedidas", callback_data="feature:channels:farewell")
-    builder.button(text="🪄 Autocompletado", callback_data="feature:channels:auto")
-    builder.button(text="✍️ Firmas", callback_data="feature:channels:signature")
-    builder.button(text="🛡 Filtros de unión", callback_data="feature:channels:joinfilter")
-    builder.button(text="↪️ Reenvío", callback_data="relay:sources")
-    builder.button(text="📚 Historial", callback_data="pub:list")
-    builder.button(text="📚 Canales y grupos", callback_data="channels:list")
-    builder.button(text="📊 Estadísticas", callback_data="stats:show")
-    builder.button(text="⚙️ Automatizaciones", callback_data="settings:show")
-    builder.adjust(1, 2, 2, 2, 2, 2, 2)
+    builder.button(text=f"📝 {tr('create_post')}", callback_data="pub:new")
+    builder.button(text=f"🗓 {tr('content_plan')}", callback_data="plan:page:0")
+    builder.button(text=f"🧩 {tr('templates')}", callback_data="tpl:list")
+    builder.button(text=f"👋 {tr('welcomes')}", callback_data="feature:channels:welcome")
+    builder.button(text=f"🚪 {tr('farewells')}", callback_data="feature:channels:farewell")
+    builder.button(text=f"🪄 {tr('autocomplete')}", callback_data="feature:channels:auto")
+    builder.button(text=f"✍️ {tr('signatures')}", callback_data="feature:channels:signature")
+    builder.button(text=f"🛡 {tr('join_filters')}", callback_data="feature:channels:joinfilter")
+    builder.button(text=f"↪️ {tr('relay')}", callback_data="relay:sources")
+    builder.button(text=f"👥 {tr('members')}", callback_data="members:channels")
+    builder.button(text=f"📚 {tr('history')}", callback_data="pub:list")
+    builder.button(text=f"📚 {tr('chats')}", callback_data="channels:list")
+    builder.button(text=f"📊 {tr('stats')}", callback_data="stats:show")
+    language = current_language_option()
+    builder.button(
+        text=f"{language.flag} {tr('language')}: {language.name}",
+        callback_data="language:list",
+    )
+    builder.adjust(1, 2, 2, 2, 2, 2, 2, 1)
     return builder.as_markup()
 
 
 def back_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
+        ]
     )
+
+
+def language_menu() -> InlineKeyboardMarkup:
+    selected = current_language()
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if item.code == selected else '▫️'} {item.flag} {item.name}",
+                callback_data=f"language:set:{item.code}",
+            )
+        ]
+        for item in LANGUAGES
+    ]
+    rows.append(
+        [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup:
@@ -83,7 +108,7 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
                 )
             ],
             [InlineKeyboardButton(text="🔄 Sincronizar ahora", callback_data="channels:refresh")],
-            [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -137,7 +162,7 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
         ]
         for channel in channels
     ]
-    rows.append([InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")])
+    rows.append([InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -296,7 +321,7 @@ def relay_sources_menu(
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")])
+    rows.append([InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -325,7 +350,10 @@ def relay_rule_menu(source_chat_id: int, rule: RelayRule | None) -> InlineKeyboa
 
 
 def relay_targets_menu(
-    source_chat_id: int, channels: list[Channel], selected: set[int]
+    source_chat_id: int,
+    channels: list[Channel],
+    selected: set[int],
+    preserve_forward_header: bool = False,
 ) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -345,7 +373,112 @@ def relay_targets_menu(
     rows.append(
         [
             InlineKeyboardButton(
+                text=(
+                    "🏷 Mostrar «Reenviado de»: "
+                    f"{'✅ Sí' if preserve_forward_header else '❌ No'}"
+                ),
+                callback_data=f"relay:mode:{source_chat_id}",
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
                 text="⬅️ Configuración", callback_data=f"relay:menu:{source_chat_id}"
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def member_approval_label(channel: Channel) -> str:
+    if channel.join_approval_mode == "immediate":
+        return "⚡ Inmediato"
+    if channel.join_approval_mode == "scheduled" and channel.join_approval_interval_hours:
+        hours = channel.join_approval_interval_hours
+        if hours == 24:
+            return "🕒 Cada día"
+        if hours == 48:
+            return "🕒 Cada 2 días"
+        return f"🕒 Cada {hours} h"
+    return "✋ Manual"
+
+
+def members_channels_menu(
+    channels: list[Channel], pending_by_channel: dict[int, int]
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=(
+                    f"{chat_icon(channel)} {channel.title} · "
+                    f"{member_approval_label(channel)} · "
+                    f"{pending_by_channel.get(channel.telegram_chat_id, 0)} pendientes"
+                )[:64],
+                callback_data=f"members:chat:{channel.telegram_chat_id}",
+            )
+        ]
+        for channel in channels
+    ]
+    rows.append(
+        [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def member_settings_menu(channel: Channel, pending: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⚡ Aceptar nuevas al instante",
+                    callback_data=f"members:mode:immediate:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🕒 Aceptar por intervalos",
+                    callback_data=f"members:intervals:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✋ Dejar pendientes manualmente",
+                    callback_data=f"members:mode:manual:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"✅ Aprobar ahora (máx. 200) · {pending}",
+                    callback_data=f"members:approve:{channel.telegram_chat_id}",
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ Chats", callback_data="members:channels")],
+        ]
+    )
+
+
+def member_interval_menu(channel_id: int) -> InlineKeyboardMarkup:
+    choices = [
+        ("Cada hora", 1),
+        ("Cada 6 horas", 6),
+        ("Cada 12 horas", 12),
+        ("Cada día", 24),
+        ("Cada 2 días", 48),
+    ]
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🕒 {label}",
+                callback_data=f"members:interval:{hours}:{channel_id}",
+            )
+        ]
+        for label, hours in choices
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Configuración", callback_data=f"members:chat:{channel_id}"
             )
         ]
     )
@@ -726,20 +859,6 @@ def recurrence_start_menu(publication_id: uuid.UUID, days: int) -> InlineKeyboar
     )
 
 
-def settings_menu(auto_approve: bool) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"Solicitudes automáticas: {'✅' if auto_approve else '❌'}",
-                    callback_data="settings:auto_approve",
-                )
-            ],
-            [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
-        ]
-    )
-
-
 def publication_markup(
     buttons: list[PublicationButton] | list[TemplateButton],
 ) -> InlineKeyboardMarkup | None:
@@ -755,7 +874,7 @@ def templates_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Crear plantilla", callback_data="tpl:new")],
-            [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
         ]
     )
 

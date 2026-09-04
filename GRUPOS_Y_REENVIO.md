@@ -12,7 +12,8 @@ Las publicaciones, plantillas, recurrencias, autoeliminación, bienvenidas, desp
 2. Selecciona el canal o grupo principal.
 3. Pulsa **Destinos**.
 4. Marca uno o varios canales o grupos.
-5. Regresa a la configuración y confirma que aparezca **Reenvío: Activo**.
+5. En esa misma pantalla elige si deseas mostrar o no «Reenviado de».
+6. Regresa a la configuración y confirma que aparezca **Reenvío: Activo**.
 
 Cada origen tiene su propia regla. Un destino puede recibir contenido de varios orígenes, siempre que la combinación no forme un ciclo.
 
@@ -23,7 +24,12 @@ Cada origen tiene su propia regla. Un destino puede recibir contenido de varios 
 - Álbumes, conservando su agrupación.
 - Botones URL públicos.
 
-La copia se publica como mensaje nuevo y no muestra la etiqueta “Reenviado de”. Los botones internos de otros bots no se copian. Tampoco se sincronizan mensajes históricos, ediciones ni eliminaciones posteriores.
+Cada origen admite uno de estos formatos:
+
+- **Copia limpia:** se publica como mensaje nuevo, no muestra «Reenviado de» y conserva los botones URL públicos cuando Telegram permite copiarlos.
+- **Con atribución:** utiliza el reenvío nativo y muestra el origen cuando Telegram lo permite. Telegram controla el resultado y puede omitir los botones del mensaje original.
+
+La copia limpia es el valor predeterminado para conservar el comportamiento de reglas creadas antes de v0.10.0. Los botones internos de otros bots no se copian. Tampoco se sincronizan mensajes históricos, ediciones ni eliminaciones posteriores.
 
 Si una publicación inmediata, programada o recurrente del propio administrador aparece en un chat configurado como origen, también puede entrar a la regla. El autocompletado y la firma se aplican al publicar desde el editor; no se vuelven a aplicar a una copia de **Reenvío**.
 
@@ -49,6 +55,7 @@ Si además utilizarás autoeliminación, concede **Eliminar mensajes**. Para sol
 2. Configura el canal como origen y el grupo como destino.
 3. Publica primero un texto con formato y botón URL.
 4. Publica después un álbum de dos imágenes.
-5. Confirma que cada contenido aparezca una sola vez y sin etiqueta de reenviado.
-6. Revisa **Reenvío → origen** y **Estadísticas** para comprobar las entregas.
-7. Intenta configurar el grupo de regreso hacia el canal; el bot debe impedir el ciclo.
+5. Prueba primero la copia limpia y después activa «Mostrar Reenviado de».
+6. Confirma que cada contenido aparezca una sola vez y con el formato elegido.
+7. Revisa **Reenvío → origen** y **Estadísticas** para comprobar las entregas.
+8. Intenta configurar el grupo de regreso hacia el canal; el bot debe impedir el ciclo.

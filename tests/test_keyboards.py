@@ -9,13 +9,16 @@ from channel_manager_bot.keyboards import (
     feature_channels_menu,
     join_verification_menu,
     main_menu,
+    member_approval_label,
+    member_interval_menu,
+    member_settings_menu,
+    members_channels_menu,
     publication_markup,
     recurrence_interval_menu,
     recurrence_label,
     relay_rule_menu,
     relay_sources_menu,
     relay_targets_menu,
-    settings_menu,
     template_detail_menu,
     timing_menu,
     ttl_label,
@@ -66,18 +69,6 @@ def test_ttl_labels_and_callbacks():
     assert f"pub:setttl:{item_id}:10080" in callbacks
 
 
-def test_settings_menu_has_no_global_welcome_actions():
-    markup = settings_menu(auto_approve=True)
-    callbacks = [
-        button.callback_data
-        for row in markup.inline_keyboard
-        for button in row
-        if button.callback_data
-    ]
-    assert "settings:auto_approve" in callbacks
-    assert not any("welcome" in callback for callback in callbacks)
-
-
 def test_feature_first_navigation_and_welcome_menu():
     channel = Channel(
         telegram_chat_id=-1001234567890,
@@ -112,6 +103,9 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "feature:channels:signature" in main_callbacks
     assert "feature:channels:joinfilter" in main_callbacks
     assert "relay:sources" in main_callbacks
+    assert "members:channels" in main_callbacks
+    assert "language:list" in main_callbacks
+    assert "settings:show" not in main_callbacks
     assert channel_callbacks == ["channel:refresh:-1001234567890", "channels:list"]
     assert "welcome:buttons:-1001234567890" in welcome_callbacks
     assert "welcome:manage:-1001234567890" in welcome_callbacks
@@ -293,3 +287,42 @@ def test_relay_menus_support_channels_groups_and_multiple_destinations():
     assert target_button.callback_data == "relay:dest:-1001:-1002"
     assert "relay:targets:-1001" in rule_callbacks
     assert "relay:toggle:-1001" in rule_callbacks
+
+
+def test_relay_destination_menu_controls_forward_header():
+    source = Channel(telegram_chat_id=-1001, title="Origen")
+    destination = Channel(telegram_chat_id=-1002, title="Destino")
+
+    clean = relay_targets_menu(-1001, [source, destination], set(), False)
+    attributed = relay_targets_menu(-1001, [source, destination], set(), True)
+
+    assert clean.inline_keyboard[-2][0].text.endswith("❌ No")
+    assert attributed.inline_keyboard[-2][0].text.endswith("✅ Sí")
+    assert attributed.inline_keyboard[-2][0].callback_data == "relay:mode:-1001"
+
+
+def test_member_menus_offer_per_chat_modes_intervals_and_batch():
+    channel = Channel(
+        telegram_chat_id=-1001,
+        title="Comunidad",
+        join_approval_mode="scheduled",
+        join_approval_interval_hours=6,
+    )
+
+    list_button = members_channels_menu([channel], {-1001: 12}).inline_keyboard[0][0]
+    settings_callbacks = [
+        button.callback_data
+        for row in member_settings_menu(channel, 12).inline_keyboard
+        for button in row
+    ]
+    interval_callbacks = [
+        row[0].callback_data for row in member_interval_menu(channel.telegram_chat_id).inline_keyboard
+    ]
+
+    assert member_approval_label(channel) == "🕒 Cada 6 h"
+    assert "12 pendientes" in list_button.text
+    assert "members:mode:immediate:-1001" in settings_callbacks
+    assert "members:mode:manual:-1001" in settings_callbacks
+    assert "members:approve:-1001" in settings_callbacks
+    assert "members:interval:1:-1001" in interval_callbacks
+    assert "members:interval:48:-1001" in interval_callbacks

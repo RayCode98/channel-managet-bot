@@ -1,4 +1,5 @@
 import logging
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatType
@@ -10,6 +11,7 @@ from sqlalchemy import text
 
 from ..config import get_settings
 from ..database import SessionFactory
+from ..i18n import tr
 from ..keyboards import main_menu
 from ..repository import ensure_user_workspace
 
@@ -23,8 +25,7 @@ async def start(message: Message, state: FSMContext) -> None:
     async with SessionFactory() as session:
         workspace = await ensure_user_workspace(session, message.from_user)
     await message.answer(
-        f"👋 <b>Bienvenido a {workspace.name}</b>\n\n"
-        "Desde aquí puedes administrar canales y grupos, preparar contenido y revisar resultados.",
+        tr("start", workspace=escape(workspace.name)),
         reply_markup=main_menu(),
     )
 
@@ -33,7 +34,7 @@ async def start(message: Message, state: FSMContext) -> None:
 async def home(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.edit_text(
-        "🏠 <b>Panel de administración</b>\n\n¿Qué deseas hacer?",
+        f"🏠 <b>{tr('home_title')}</b>\n\n{tr('home_prompt')}",
         reply_markup=main_menu(),
     )
     await callback.answer()
@@ -42,7 +43,7 @@ async def home(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(Command("cancel"))
 async def cancel(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Operación cancelada.", reply_markup=main_menu())
+    await message.answer(tr("cancelled"), reply_markup=main_menu())
 
 
 @router.message(Command("health"))

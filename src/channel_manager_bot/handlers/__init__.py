@@ -9,9 +9,10 @@ from . import (
     feature_navigation,
     join_filters,
     joins,
+    languages,
+    members,
     publications,
     relays,
-    settings,
     stats,
     templates,
 )
@@ -19,6 +20,8 @@ from . import (
 
 def include_routers(dispatcher: Dispatcher) -> None:
     dispatcher.include_router(common.router)
+    dispatcher.include_router(languages.router)
+    dispatcher.include_router(members.router)
     dispatcher.include_router(channels.router)
     dispatcher.include_router(channel_texts.router)
     dispatcher.include_router(farewells.router)
@@ -30,4 +33,3 @@ def include_routers(dispatcher: Dispatcher) -> None:
     dispatcher.include_router(content_plan.router)
     dispatcher.include_router(joins.router)
     dispatcher.include_router(stats.router)
-    dispatcher.include_router(settings.router)

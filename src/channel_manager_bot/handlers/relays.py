@@ -58,6 +58,11 @@ def rule_text(
     failed: int,
 ) -> str:
     status = "Activo" if rule and rule.enabled and destinations else "Desactivado"
+    mode = (
+        "Con etiqueta «Reenviado de»"
+        if rule and rule.preserve_forward_header
+        else "Copia limpia, sin etiqueta"
+    )
     destination_lines = (
         "\n".join(
             f"• {'👥' if item.chat_type in {'group', 'supergroup'} else '📢'} "
@@ -70,10 +75,11 @@ def rule_text(
     return (
         f"↪️ <b>Reenvío · {escape(source.title)}</b>\n\n"
         f"Estado: <b>{status}</b>\n"
+        f"Formato: <b>{mode}</b>\n"
         f"Entregas: <b>{successful} correctas</b> · <b>{failed} fallidas</b>\n\n"
         f"<b>Destinos:</b>\n{destination_lines}\n\n"
-        "Las publicaciones nuevas se copiarán sin la etiqueta «Reenviado de». Se conserva "
-        "el contenido y los botones URL; no se copian botones internos de otros bots."
+        "La copia limpia conserva botones URL. Al mostrar el origen, Telegram controla el "
+        "formato y puede omitir los botones del mensaje original."
     )
 
 
@@ -184,7 +190,12 @@ async def show_relay_targets(callback: CallbackQuery) -> None:
         text += "\n\nVincula al menos otro canal o grupo para continuar."
     await callback.message.edit_text(
         text,
-        reply_markup=relay_targets_menu(source_chat_id, channels, selected),
+        reply_markup=relay_targets_menu(
+            source_chat_id,
+            channels,
+            selected,
+            bool(rule and rule.preserve_forward_header),
+        ),
     )
     await callback.answer()
 
@@ -260,6 +271,8 @@ async def toggle_relay_destination(callback: CallbackQuery) -> None:
                     enabled=True,
                 )
                 session.add(rule)
+            elif not rule.destinations:
+                rule.enabled = True
             edges = await active_relay_edges(session, workspace.id, excluding_rule_id=rule.id)
             if would_create_cycle(edges, source_chat_id, destination_chat_id):
                 await callback.answer(
@@ -285,9 +298,61 @@ async def toggle_relay_destination(callback: CallbackQuery) -> None:
         channels = await get_active_channels(session, workspace.id)
         selected = {item.destination_chat_id for item in rule.destinations}
     await callback.message.edit_reply_markup(
-        reply_markup=relay_targets_menu(source_chat_id, channels, selected)
+        reply_markup=relay_targets_menu(
+            source_chat_id,
+            channels,
+            selected,
+            rule.preserve_forward_header,
+        )
     )
     await callback.answer("Destino actualizado")
+
+
+@router.callback_query(F.data.startswith("relay:mode:"))
+async def toggle_relay_mode(callback: CallbackQuery) -> None:
+    source_chat_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        source = await owned_channel(session, source_chat_id, callback.from_user.id)
+        if workspace is None or source is None:
+            await callback.answer("Chat no encontrado.", show_alert=True)
+            return
+        rule = await load_rule(session, source_chat_id, workspace.id)
+        if rule is None:
+            rule = RelayRule(
+                id=uuid.uuid4(),
+                workspace_id=workspace.id,
+                source_chat_id=source_chat_id,
+                creator_user_id=callback.from_user.id,
+                enabled=False,
+                preserve_forward_header=True,
+            )
+            session.add(rule)
+        else:
+            rule.preserve_forward_header = not rule.preserve_forward_header
+        session.add(
+            AuditLog(
+                workspace_id=workspace.id,
+                actor_user_id=callback.from_user.id,
+                action="relay.forward_header_toggled",
+                details=(
+                    f"source_chat_id={source_chat_id};"
+                    f"enabled={rule.preserve_forward_header}"
+                ),
+            )
+        )
+        await session.commit()
+        channels = await get_active_channels(session, workspace.id)
+        selected = {item.destination_chat_id for item in rule.destinations}
+    await callback.message.edit_reply_markup(
+        reply_markup=relay_targets_menu(
+            source_chat_id,
+            channels,
+            selected,
+            rule.preserve_forward_header,
+        )
+    )
+    await callback.answer("Formato de reenvío actualizado")
 
 
 @router.callback_query(F.data.startswith("relay:toggle:"))
@@ -408,7 +473,21 @@ async def relay_source_messages(
             by_source = {item.source_message_id: item for item in deliveries}
 
             try:
-                if len(pending_ids) == 1:
+                if rule.preserve_forward_header and len(pending_ids) == 1:
+                    sent = await bot.forward_message(
+                        chat_id=destination_chat_id,
+                        from_chat_id=source_chat_id,
+                        message_id=pending_ids[0],
+                    )
+                    sent_ids = [sent.message_id]
+                elif rule.preserve_forward_header:
+                    sent = await bot.forward_messages(
+                        chat_id=destination_chat_id,
+                        from_chat_id=source_chat_id,
+                        message_ids=pending_ids,
+                    )
+                    sent_ids = [item.message_id for item in sent]
+                elif len(pending_ids) == 1:
                     sent = await bot.copy_message(
                         chat_id=destination_chat_id,
                         from_chat_id=source_chat_id,

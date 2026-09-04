@@ -15,7 +15,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Envío inmediato o programación con zona horaria del cliente.
 - Cola persistente con bloqueo transaccional y recuperación tras reinicios.
 - Historial y resultado de entrega por canal.
-- Aprobación automática o manual de solicitudes de ingreso.
+- Aprobación de solicitudes por canal en modo manual, inmediato o cada 1, 6, 12, 24 o 48 horas.
+- Lotes seguros de hasta 200 solicitudes conocidas por ejecución.
 - Bienvenida diferente por canal antes de aprobar una solicitud.
 - Bienvenidas con texto enriquecido, foto, multimedia y hasta 20 botones URL.
 - Personalización de bienvenidas con `{nombre}` y `{canal}`, colores y vista previa.
@@ -29,7 +30,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Verificación privada mediante botones para unirse y comprobar nuevamente.
 - Sincronización automática de nombre, usuario público, miembros, tipo y permisos de cada chat.
 - Reenvío automático desde un canal o grupo principal hacia múltiples canales o grupos.
-- Copia limpia de texto, formato, multimedia, álbumes y botones URL sin la etiqueta de reenviado.
+- Reenvío configurable como copia limpia o conservando la etiqueta «Reenviado de».
+- Copia de texto, formato, multimedia y álbumes; los botones URL se conservan en modo limpio.
 - Protección contra reenvíos duplicados y ciclos entre chats.
 - Menús independientes de Bienvenidas, Despedidas, Autocompletado, Firmas y Filtros de unión.
 - Plan de contenido paginado y agrupado por fecha.
@@ -43,6 +45,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Conteo de miembros, variación entre consultas, solicitudes y entregas.
 - Estado técnico mediante `/health` para administradores de plataforma.
 - Procesamiento silencioso de solicitudes, sin avisos privados a los administradores.
+- Selector persistente entre 12 idiomas frecuentes para `/start`, el menú principal y la navegación común.
 - Docker Compose con PostgreSQL, Redis, migraciones, bot y worker separados.
 
 ## Requisitos
@@ -107,11 +110,11 @@ El permiso para agregar suscriptores permite que Telegram entregue al bot las so
 
 El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminación programada.
 
-## Actualizar desde v0.1.x
+## Actualizar una instalación existente
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si ya utilizas una versión entre v0.2.x y v0.8.x, sigue [`UPGRADE_V0.9.0.md`](UPGRADE_V0.9.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Si ya utilizas una versión entre v0.2.x y v0.9.x, sigue [`UPGRADE_V0.10.0.md`](UPGRADE_V0.10.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Cómo funciona la programación
 
@@ -167,9 +170,24 @@ El bot necesita **Invitar usuarios** y **Restringir miembros** en el canal prote
 
 Desde **Reenvío** se elige primero el canal o grupo de origen y después uno o varios destinos vinculados. Solamente se copian mensajes nuevos recibidos después de activar la regla; no se importan publicaciones históricas.
 
-La copia no muestra la etiqueta “Reenviado de”. Conserva el contenido que Telegram permite copiar, el formato, la multimedia, los álbumes y los botones URL. Los botones `callback`, inicios de sesión u otras acciones privadas de bots se omiten porque no son reutilizables fuera del bot que los creó.
+Dentro de **Destinos** se elige también el formato de esa regla:
+
+- **Copia limpia:** no muestra «Reenviado de» y puede conservar los botones URL públicos.
+- **Con atribución:** utiliza el reenvío nativo de Telegram y muestra el origen cuando Telegram lo permite. En este modo Telegram controla la representación y puede omitir los botones originales.
+
+Los botones `callback`, inicios de sesión u otras acciones privadas de bots no se reutilizan fuera del bot que los creó.
 
 El sistema registra cada entrega por mensaje y destino para no repetirla. Tampoco permite usar el origen como destino ni formar ciclos directos o indirectos. Las ediciones y eliminaciones posteriores del original no se sincronizan en esta versión. Consulta los detalles y la prueba recomendada en [`GRUPOS_Y_REENVIO.md`](GRUPOS_Y_REENVIO.md).
+
+## Miembros e idiomas
+
+**Miembros** reemplaza a la antigua sección **Automatizaciones**. El flujo es **Miembros → canal o grupo → modo**. Cada chat puede dejar solicitudes para revisión manual, aprobarlas al recibirlas o procesar hasta 200 solicitudes conocidas cada 1, 6, 12, 24 o 48 horas. También existe **Aprobar ahora** para ejecutar un lote sin cambiar el modo configurado.
+
+El bot solamente puede procesar solicitudes que Telegram le haya entregado mientras conserva el permiso **Invitar usuarios**. Los filtros de escritura y la unión obligatoria se evalúan primero.
+
+El botón de idioma muestra la bandera, la palabra correspondiente al idioma elegido y su nombre nativo. Se incluyen español, inglés, portugués, francés, alemán, italiano, ruso, árabe, hindi, chino, japonés y coreano. En esta fase están traducidos `/start`, el panel principal, el selector de idioma y la navegación común. Las pantallas operativas especializadas continúan en español hasta realizar una revisión humana completa de cada flujo.
+
+Consulta [`MIEMBROS_E_IDIOMAS.md`](MIEMBROS_E_IDIOMAS.md) para ver el comportamiento y las limitaciones.
 
 ## Seguridad aplicada
 

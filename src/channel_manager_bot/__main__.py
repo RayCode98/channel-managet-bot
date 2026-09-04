@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 
 from .config import get_settings
 from .handlers import include_routers
+from .i18n import LocaleMiddleware
 
 
 async def main() -> None:
@@ -22,6 +23,7 @@ async def main() -> None:
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dispatcher = Dispatcher(storage=storage)
     dispatcher["redis"] = redis
+    dispatcher.update.outer_middleware(LocaleMiddleware())
     include_routers(dispatcher)
     try:
         await bot.delete_webhook(drop_pending_updates=False)

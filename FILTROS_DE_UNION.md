@@ -51,7 +51,7 @@ Al recibir una solicitud, el bot consulta la membresía en el destino:
 - Si al verificar ya pertenece, aprueba automáticamente la solicitud.
 - Si Telegram no permite comprobar la membresía, no aprueba por seguridad y permite intentar la verificación otra vez.
 
-Forzar unión tiene prioridad sobre **Solicitudes automáticas**. Activar el autoaceptado global nunca evita esta comprobación.
+Forzar unión tiene prioridad sobre el modo configurado en **Miembros**. Ninguna aprobación manual, inmediata o por intervalos evita esta comprobación.
 
 ## Permisos necesarios
 
@@ -74,6 +74,6 @@ Telegram permite iniciar el mensaje privado mediante el identificador temporal d
 2. Aplicar el filtro de escritura.
 3. Comprobar la membresía obligatoria.
 4. Enviar la bienvenida del canal o grupo.
-5. Aplicar aprobación obligatoria, autoaceptado global o dejar pendiente.
+5. Aplicar el modo de aprobación del chat o dejar la solicitud pendiente.
 
 Este orden evita dar la bienvenida o aprobar a una persona que no superó los filtros.

@@ -8,7 +8,8 @@ from sqlalchemy import select
 
 from ..database import SessionFactory
 from ..keyboards import join_verification_menu
-from ..models import Channel, ChannelStatus, JoinRequestEvent, Membership, Role, Workspace
+from ..models import Channel, ChannelStatus, JoinRequestEvent, Membership, Role
+from ..repository import utcnow
 from ..services.join_filters import blocked_name_scripts, is_current_member
 from ..services.welcome import send_channel_welcome
 
@@ -62,7 +63,6 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
         channel = await session.get(Channel, request.chat.id)
         if channel is None or channel.status != ChannelStatus.active:
             return
-        workspace = await session.get(Workspace, channel.workspace_id)
         event = JoinRequestEvent(
             channel_id=channel.telegram_chat_id,
             user_id=request.from_user.id,
@@ -127,6 +127,7 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
                 await bot.approve_chat_join_request(request.chat.id, request.from_user.id)
                 event.approved = True
                 event.outcome = "approved_requirement"
+                event.approved_at = utcnow()
             except TelegramAPIError as exc:
                 logger.warning("Could not approve verified join request: %s", exc)
                 event.outcome = "approval_failed"
@@ -139,18 +140,23 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
             channel=channel,
             user_name=request.from_user.full_name,
         )
-        if workspace.auto_approve:
+        if channel.join_approval_mode == "immediate":
             try:
                 await bot.approve_chat_join_request(request.chat.id, request.from_user.id)
                 event.approved = True
                 event.outcome = "approved_auto"
+                event.approved_at = utcnow()
             except TelegramAPIError as exc:
                 logger.warning("Could not auto-approve join request: %s", exc)
                 event.approved = False
                 event.outcome = "approval_failed"
             await session.commit()
             return
-        event.outcome = "pending"
+        event.outcome = (
+            "pending_scheduled"
+            if channel.join_approval_mode == "scheduled"
+            else "pending_manual"
+        )
         await session.commit()
 
 
@@ -191,6 +197,7 @@ async def decide_join(callback: CallbackQuery, bot: Bot) -> None:
                 if event:
                     event.approved = True
                     event.outcome = "approved_manual"
+                    event.approved_at = utcnow()
                     await session.commit()
             else:
                 await bot.decline_chat_join_request(chat_id, user_id)
@@ -270,6 +277,7 @@ async def verify_required_membership(callback: CallbackQuery, bot: Bot) -> None:
         if event:
             event.approved = True
             event.outcome = "approved_requirement"
+            event.approved_at = utcnow()
         await session.commit()
     await callback.message.edit_text(f"✅ Solicitud aprobada para <b>{escape(channel.title)}</b>.")
     await callback.answer("Membresía verificada")
