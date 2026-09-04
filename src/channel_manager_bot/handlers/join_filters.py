@@ -22,6 +22,7 @@ from ..models import (
     JoinRequirement,
 )
 from ..repository import get_active_channels, get_workspace, utcnow
+from ..services.channel_sync import normalize_chat_type
 from ..services.join_filters import SCRIPT_LABELS
 from .channels import owned_channel
 
@@ -306,9 +307,10 @@ async def select_force_target(callback: CallbackQuery) -> None:
             invite_url = invite.invite_link
 
         title = target_chat.title or target.title
+        target_chat_type = normalize_chat_type(target_chat.type)
         target.title = title
         target.username = target_chat.username
-        target.chat_type = target_chat.type.value
+        target.chat_type = target_chat_type
         target.can_invite_users = target_can_invite
         target.last_checked_at = utcnow()
         requirement = await session.get(JoinRequirement, source_id)
@@ -317,7 +319,7 @@ async def select_force_target(callback: CallbackQuery) -> None:
             source.join_requirement = requirement
         requirement.target_chat_id = target_id
         requirement.target_title = title
-        requirement.target_type = target_chat.type.value
+        requirement.target_type = target_chat_type
         requirement.invite_url = invite_url
         requirement.enabled = True
         session.add(

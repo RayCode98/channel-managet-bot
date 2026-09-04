@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## 0.10.1
+
+- Corrige el registro de canales, grupos y supergrupos cuando aiogram entrega el tipo de chat como texto en lugar de un enum.
+- Normaliza el tipo de chat en el alta automática, la sincronización periódica y la configuración de **Forzar unión**.
+- Agrega pruebas de regresión para los formatos `str` y `ChatType`.
+- Registra en los logs el inicio y la confirmación de cada conexión de chat.
+- Ignora de forma segura la respuesta de Telegram `message is not modified` al refrescar una lista sin cambios.
+- No requiere una migración adicional; el esquema permanece en `20260904_0009`.
+
 ## 0.10.0
 
 - Opción por cada regla de reenvío para conservar la etiqueta «Reenviado de» o publicar una copia limpia.

@@ -9,6 +9,7 @@ from channel_manager_bot.services.channel_sync import (
     fetch_channel_snapshot,
     membership_access,
     membership_capabilities,
+    normalize_chat_type,
 )
 
 
@@ -45,6 +46,11 @@ def test_membership_capabilities_reads_join_filter_permissions():
     assert membership_capabilities(member) == (True, False)
 
 
+def test_normalize_chat_type_accepts_aiogram_enum_and_plain_string():
+    assert normalize_chat_type(ChatType.CHANNEL) == "channel"
+    assert normalize_chat_type("supergroup") == "supergroup"
+
+
 class FakeBot:
     id = 777
 
@@ -52,7 +58,7 @@ class FakeBot:
         return SimpleNamespace(
             title="Nombre actualizado",
             username="canal_nuevo",
-            type=ChatType.CHANNEL,
+            type="channel",
         )
 
     async def get_chat_member(self, channel_id, user_id):

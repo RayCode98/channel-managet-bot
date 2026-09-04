@@ -3,7 +3,7 @@ from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus, ChatType
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
 from sqlalchemy import select
@@ -25,7 +25,7 @@ from ..repository import (
     get_workspace,
     utcnow,
 )
-from ..services.channel_sync import refresh_channels
+from ..services.channel_sync import normalize_chat_type, refresh_channels
 from ..services.welcome import (
     content_from_message,
     parse_welcome_buttons,
@@ -73,7 +73,11 @@ async def render_channels_list(callback: CallbackQuery) -> None:
             "📚 <b>Canales y grupos vinculados</b>\n\n"
             "Todavía no has agregado ningún canal o grupo."
         )
-    await callback.message.edit_text(text, reply_markup=channels_menu(channels))
+    try:
+        await callback.message.edit_text(text, reply_markup=channels_menu(channels))
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
 
 
 def channel_detail_text(channel: Channel) -> str:
@@ -483,11 +487,20 @@ async def add_channel_instructions(callback: CallbackQuery) -> None:
 )
 async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
     actor = event.from_user
+    chat_type = normalize_chat_type(event.chat.type)
+    logger.info(
+        "Bot membership change received: chat_id=%s type=%s actor_user_id=%s old=%s new=%s",
+        event.chat.id,
+        chat_type,
+        actor.id,
+        event.old_chat_member.status,
+        event.new_chat_member.status,
+    )
     async with SessionFactory() as session:
         workspace = await ensure_user_workspace(session, actor)
         existing = await session.get(Channel, event.chat.id)
         new_member = event.new_chat_member
-        is_group = event.chat.type in {ChatType.GROUP, ChatType.SUPERGROUP}
+        is_group = chat_type in {ChatType.GROUP.value, ChatType.SUPERGROUP.value}
         is_owner = new_member.status == ChatMemberStatus.CREATOR
         is_admin = is_owner or new_member.status == ChatMemberStatus.ADMINISTRATOR
         can_post = is_admin if is_group else is_owner or bool(
@@ -525,13 +538,13 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                     workspace_id=workspace.id,
                     title=event.chat.title or str(event.chat.id),
                     username=event.chat.username,
-                    chat_type=event.chat.type.value,
+                    chat_type=chat_type,
                     added_by_user_id=actor.id,
                 )
                 session.add(existing)
             existing.title = event.chat.title or existing.title
             existing.username = event.chat.username
-            existing.chat_type = event.chat.type.value
+            existing.chat_type = chat_type
             existing.status = (
                 ChannelStatus.active if can_post else ChannelStatus.missing_permissions
             )
@@ -545,13 +558,19 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                     actor_user_id=actor.id,
                     action="chat.connected",
                     details=(
-                        f"chat_id={event.chat.id};type={event.chat.type.value};"
+                        f"chat_id={event.chat.id};type={chat_type};"
                         f"can_post={can_post};"
                         f"can_invite={can_invite};can_restrict={can_restrict}"
                     ),
                 )
             )
             await session.commit()
+            logger.info(
+                "Chat connection saved: chat_id=%s workspace_id=%s status=%s",
+                existing.telegram_chat_id,
+                existing.workspace_id,
+                existing.status,
+            )
             if can_post:
                 await bot.send_message(
                     actor.id, f"✅ <b>{escape(existing.title)}</b> quedó conectado correctamente."

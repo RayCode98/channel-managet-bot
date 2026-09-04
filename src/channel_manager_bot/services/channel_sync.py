@@ -33,6 +33,11 @@ class RefreshSummary:
     failed: int = 0
 
 
+def normalize_chat_type(chat_type) -> str:
+    """Return a stable Telegram chat type for enum- and string-based models."""
+    return str(getattr(chat_type, "value", chat_type))
+
+
 def membership_access(member, chat_type: str = "channel") -> tuple[ChannelStatus, bool]:
     if member.status == ChatMemberStatus.CREATOR:
         return ChannelStatus.active, True
@@ -61,7 +66,7 @@ def membership_capabilities(member) -> tuple[bool, bool]:
 async def fetch_channel_snapshot(bot: Bot, channel_id: int) -> ChannelSnapshot:
     chat = await bot.get_chat(channel_id)
     member = await bot.get_chat_member(channel_id, bot.id)
-    chat_type = chat.type.value
+    chat_type = normalize_chat_type(chat.type)
     status, can_post = membership_access(member, chat_type)
     can_invite, can_restrict = membership_capabilities(member)
     try:
