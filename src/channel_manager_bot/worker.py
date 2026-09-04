@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -7,6 +8,7 @@ from aiogram.enums import ParseMode
 from redis.asyncio import Redis
 
 from .config import get_settings
+from .services.channel_sync import channel_refresh_loop
 from .services.publisher import (
     claim_next_publication,
     delete_due_messages,
@@ -21,6 +23,10 @@ async def main() -> None:
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     await recover_stale_jobs()
+    refresh_task = asyncio.create_task(
+        channel_refresh_loop(bot, settings.channel_refresh_hours),
+        name="channel-refresh",
+    )
     try:
         while True:
             await redis.set("worker:heartbeat", "ok", ex=15)
@@ -31,6 +37,9 @@ async def main() -> None:
                 continue
             await asyncio.sleep(settings.worker_poll_seconds)
     finally:
+        refresh_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await refresh_task
         await redis.aclose()
         await bot.session.close()
 

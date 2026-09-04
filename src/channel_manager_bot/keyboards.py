@@ -32,11 +32,15 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="📝 Crear publicación", callback_data="pub:new")
     builder.button(text="🗓 Plan de contenido", callback_data="plan:page:0")
     builder.button(text="🧩 Plantillas", callback_data="tpl:list")
+    builder.button(text="👋 Bienvenidas", callback_data="feature:channels:welcome")
+    builder.button(text="🚪 Despedidas", callback_data="feature:channels:farewell")
+    builder.button(text="🪄 Autocompletado", callback_data="feature:channels:auto")
+    builder.button(text="✍️ Firmas", callback_data="feature:channels:signature")
     builder.button(text="📚 Historial", callback_data="pub:list")
     builder.button(text="📢 Mis canales", callback_data="channels:list")
     builder.button(text="📊 Estadísticas", callback_data="stats:show")
     builder.button(text="⚙️ Automatizaciones", callback_data="settings:show")
-    builder.adjust(1, 2, 2, 1, 1)
+    builder.adjust(1, 2, 2, 2, 2, 1, 1)
     return builder.as_markup()
 
 
@@ -59,7 +63,7 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
     rows.extend(
         [
             [InlineKeyboardButton(text="➕ Agregar canal", callback_data="channels:add")],
-            [InlineKeyboardButton(text="🔄 Actualizar lista", callback_data="channels:list")],
+            [InlineKeyboardButton(text="🔄 Sincronizar ahora", callback_data="channels:refresh")],
             [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
         ]
     )
@@ -67,84 +71,108 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
 
 
 def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
-    configured = bool(channel.welcome_source_message_id)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🖼 Configurar bienvenida",
-                    callback_data=f"welcome:content:{channel.telegram_chat_id}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔗 Configurar botones",
-                    callback_data=f"welcome:buttons:{channel.telegram_chat_id}",
-                )
-            ],
-            *(
-                [
-                    [
-                        InlineKeyboardButton(
-                            text="🧹 Administrar botones",
-                            callback_data=f"welcome:manage:{channel.telegram_chat_id}",
-                        )
-                    ]
-                ]
-                if channel.welcome_buttons
-                else []
-            ),
-            *(
-                [
-                    [
-                        InlineKeyboardButton(
-                            text="👁 Vista previa",
-                            callback_data=f"welcome:preview:{channel.telegram_chat_id}",
-                        )
-                    ]
-                ]
-                if configured
-                else []
-            ),
-            [
-                InlineKeyboardButton(
-                    text=f"Bienvenida: {'✅' if channel.welcome_enabled else '❌'}",
-                    callback_data=f"welcome:toggle:{channel.telegram_chat_id}",
-                )
-            ],
-            *(
-                [
-                    [
-                        InlineKeyboardButton(
-                            text="🗑 Borrar bienvenida",
-                            callback_data=f"welcome:clear:{channel.telegram_chat_id}",
-                        )
-                    ]
-                ]
-                if configured
-                else []
-            ),
-            [
-                InlineKeyboardButton(
-                    text=f"🚪 Despedida: {'✅' if channel.farewell_enabled else '❌'}",
-                    callback_data=f"farewell:menu:{channel.telegram_chat_id}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=(f"🪄 Autocompletado: {'✅' if channel.autocomplete_enabled else '❌'}"),
-                    callback_data=f"posttext:menu:auto:{channel.telegram_chat_id}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=f"✍️ Firma: {'✅' if channel.signature_enabled else '❌'}",
-                    callback_data=f"posttext:menu:signature:{channel.telegram_chat_id}",
+                    text="🔄 Actualizar información",
+                    callback_data=f"channel:refresh:{channel.telegram_chat_id}",
                 )
             ],
             [InlineKeyboardButton(text="⬅️ Mis canales", callback_data="channels:list")],
         ]
     )
+
+
+def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardMarkup:
+    def destination(channel: Channel) -> str:
+        if kind == "welcome":
+            return f"welcome:menu:{channel.telegram_chat_id}"
+        if kind == "farewell":
+            return f"farewell:menu:{channel.telegram_chat_id}"
+        return f"posttext:menu:{kind}:{channel.telegram_chat_id}"
+
+    def enabled(channel: Channel) -> bool:
+        return {
+            "welcome": channel.welcome_enabled,
+            "farewell": channel.farewell_enabled,
+            "auto": channel.autocomplete_enabled,
+            "signature": channel.signature_enabled,
+        }[kind]
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if enabled(channel) else '❌'} {channel.title}"[:64],
+                callback_data=destination(channel),
+            )
+        ]
+        for channel in channels
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def welcome_menu(channel: Channel) -> InlineKeyboardMarkup:
+    configured = bool(channel.welcome_source_message_id)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🖼 Configurar bienvenida",
+                callback_data=f"welcome:content:{channel.telegram_chat_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔗 Configurar botones",
+                callback_data=f"welcome:buttons:{channel.telegram_chat_id}",
+            )
+        ],
+    ]
+    if channel.welcome_buttons:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧹 Administrar botones",
+                    callback_data=f"welcome:manage:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    if configured:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="👁 Vista previa",
+                    callback_data=f"welcome:preview:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"Bienvenida: {'✅' if channel.welcome_enabled else '❌'}",
+                callback_data=f"welcome:toggle:{channel.telegram_chat_id}",
+            )
+        ]
+    )
+    if configured:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Borrar bienvenida",
+                    callback_data=f"welcome:clear:{channel.telegram_chat_id}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Canales con bienvenida",
+                callback_data="feature:channels:welcome",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
@@ -191,8 +219,8 @@ def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Volver al canal",
-                callback_data=f"channel:open:{channel.telegram_chat_id}",
+                text="⬅️ Volver a canales",
+                callback_data=f"feature:channels:{kind}",
             )
         ]
     )
@@ -209,7 +237,11 @@ def welcome_buttons_menu(channel_id: int, buttons: list[WelcomeButton]) -> Inlin
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
     rows.append(
-        [InlineKeyboardButton(text="⬅️ Volver al canal", callback_data=f"channel:open:{channel_id}")]
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver a bienvenida", callback_data=f"welcome:menu:{channel_id}"
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -268,8 +300,8 @@ def farewell_menu(channel: Channel) -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Volver al canal",
-                callback_data=f"channel:open:{channel.telegram_chat_id}",
+                text="⬅️ Canales con despedida",
+                callback_data="feature:channels:farewell",
             )
         ]
     )

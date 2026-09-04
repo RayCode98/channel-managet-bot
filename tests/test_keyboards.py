@@ -5,6 +5,8 @@ from channel_manager_bot.keyboards import (
     channel_post_text_menu,
     composer_menu,
     farewell_menu,
+    feature_channels_menu,
+    main_menu,
     publication_markup,
     recurrence_interval_menu,
     recurrence_label,
@@ -13,6 +15,7 @@ from channel_manager_bot.keyboards import (
     timing_menu,
     ttl_label,
     ttl_menu,
+    welcome_menu,
 )
 from channel_manager_bot.models import Channel, FarewellButton, WelcomeButton
 
@@ -64,7 +67,7 @@ def test_settings_menu_has_no_global_welcome_actions():
     assert not any("welcome" in callback for callback in callbacks)
 
 
-def test_configured_channel_has_buttons_and_preview_actions():
+def test_feature_first_navigation_and_welcome_menu():
     channel = Channel(
         telegram_chat_id=-1001234567890,
         title="Canal",
@@ -82,15 +85,38 @@ def test_configured_channel_has_buttons_and_preview_actions():
         )
     )
 
-    markup = channel_detail_menu(channel)
-    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+    main_callbacks = [button.callback_data for row in main_menu().inline_keyboard for button in row]
+    channel_callbacks = [
+        button.callback_data
+        for row in channel_detail_menu(channel).inline_keyboard
+        for button in row
+    ]
+    welcome_callbacks = [
+        button.callback_data for row in welcome_menu(channel).inline_keyboard for button in row
+    ]
 
-    assert "welcome:buttons:-1001234567890" in callbacks
-    assert "welcome:manage:-1001234567890" in callbacks
-    assert "welcome:preview:-1001234567890" in callbacks
-    assert "farewell:menu:-1001234567890" in callbacks
-    assert "posttext:menu:auto:-1001234567890" in callbacks
-    assert "posttext:menu:signature:-1001234567890" in callbacks
+    assert "feature:channels:welcome" in main_callbacks
+    assert "feature:channels:farewell" in main_callbacks
+    assert "feature:channels:auto" in main_callbacks
+    assert "feature:channels:signature" in main_callbacks
+    assert channel_callbacks == ["channel:refresh:-1001234567890", "channels:list"]
+    assert "welcome:buttons:-1001234567890" in welcome_callbacks
+    assert "welcome:manage:-1001234567890" in welcome_callbacks
+    assert "welcome:preview:-1001234567890" in welcome_callbacks
+    assert "feature:channels:welcome" in welcome_callbacks
+
+
+def test_feature_channel_list_routes_directly_to_selected_configuration():
+    channel = Channel(
+        telegram_chat_id=-1001234567890,
+        title="Canal",
+        farewell_enabled=True,
+    )
+
+    button = feature_channels_menu([channel], "farewell").inline_keyboard[0][0]
+
+    assert button.text == "✅ Canal"
+    assert button.callback_data == "farewell:menu:-1001234567890"
 
 
 def test_configured_farewell_has_preview_and_button_management():

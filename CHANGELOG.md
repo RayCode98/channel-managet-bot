@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 0.7.0
+
+- Sincronización automática de todos los canales al iniciar el worker y cada seis horas.
+- Intervalo configurable mediante `CHANNEL_REFRESH_HOURS`, entre más de cero y 168 horas.
+- Actualización de título, nombre de usuario público, miembros, permiso de publicación y acceso.
+- Marcado automático de canales que perdieron acceso o permisos.
+- Botón **Sincronizar ahora** para actualizar todos los canales de un cliente.
+- Actualización manual individual desde el detalle de cada canal.
+- Estadísticas reutilizan la sincronización central y muestran cambios desde la revisión anterior.
+- Nuevos botones principales para Bienvenidas, Despedidas, Autocompletado y Firmas.
+- Navegación reestructurada como `función → canal → opciones`.
+- **Mis canales** queda dedicado a datos generales y estado de conexión.
+- No requiere una migración adicional; el esquema permanece en `20260904_0006`.
+
 ## 0.6.0
 
 - Autocompletado independiente para cada canal.

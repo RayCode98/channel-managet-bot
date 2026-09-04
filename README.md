@@ -23,6 +23,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Personalización de despedidas con `{nombre}` y `{canal}`, activación y vista previa.
 - Autocompletado por canal para publicaciones que no traen descripción.
 - Firma por canal agregada siempre al final de cada publicación.
+- Sincronización automática de nombre, usuario público, miembros y permisos de cada canal.
+- Menús independientes de Bienvenidas, Despedidas, Autocompletado y Firmas.
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
 - Vista previa exacta de plantillas antes de utilizarlas.
@@ -99,7 +101,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Si ya utilizas una versión entre v0.2.x y v0.5.x, sigue [`UPGRADE_V0.6.0.md`](UPGRADE_V0.6.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Si ya utilizas una versión entre v0.2.x y v0.6.x, sigue [`UPGRADE_V0.7.0.md`](UPGRADE_V0.7.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Cómo funciona la programación
 
@@ -115,13 +117,13 @@ Al configurar el contenido puedes usar `{nombre}` para el nombre del solicitante
 
 ## Despedidas y limitación de Telegram
 
-Cada canal tiene su propia despedida en **Mis canales → canal → Despedida**. Admite el mismo contenido, variables, botones y colores que una bienvenida, además de vista previa, activación y eliminación individual de botones.
+Cada canal tiene su propia despedida en **Despedidas → elegir canal**. Admite el mismo contenido, variables, botones y colores que una bienvenida, además de vista previa, activación y eliminación individual de botones.
 
 El bot reacciona únicamente cuando Telegram informa que la propia persona abandonó voluntariamente el canal. No envía despedidas por expulsiones. El mensaje privado es de mejor esfuerzo: solo llegará si esa persona ya abrió el bot y todavía permite que le escriba. Los fallos se registran silenciosamente y nunca generan una notificación al administrador.
 
 ## Autocompletado y firma
 
-Ambas funciones se configuran desde **Mis canales → canal** y admiten formato enriquecido de Telegram:
+Ambas funciones tienen su propio botón en el menú principal. Después se elige el canal y se configura el texto enriquecido de Telegram:
 
 - **Autocompletado:** solamente se utiliza cuando la publicación no tiene texto o descripción. Si ya existe una descripción, no la modifica.
 - **Firma:** siempre se agrega al final. Si existe una descripción, se separa de ella con una línea en blanco.
@@ -131,6 +133,14 @@ Cuando están activas las dos funciones y el contenido no tiene descripción, el
 Las publicaciones y plantillas creadas antes de v0.6.0 se copian sin cambios para proteger su formato original. Crea nuevamente una plantilla antigua si deseas que utilice autocompletado y firma.
 
 Consulta la tabla completa de comportamiento en [`AUTOCOMPLETADO_Y_FIRMA.md`](AUTOCOMPLETADO_Y_FIRMA.md).
+
+## Sincronización y navegación por funciones
+
+El worker sincroniza todos los canales al iniciar y después cada seis horas. Consulta nuevamente a Telegram para actualizar el título, `@usuario`, cantidad de miembros, permiso para publicar y estado de acceso. El intervalo se puede cambiar con `CHANNEL_REFRESH_HOURS`; también existe **Mis canales → Sincronizar ahora**.
+
+Las personalizaciones se administran desde cuatro botones independientes del menú principal. El flujo es **función → canal → opciones**, por ejemplo: **Bienvenidas → Canal de noticias → Configurar bienvenida**. La sección **Mis canales** queda reservada para información general, conexión y sincronización.
+
+Consulta [`NAVEGACION_Y_SINCRONIZACION.md`](NAVEGACION_Y_SINCRONIZACION.md) para ver el flujo completo.
 
 ## Seguridad aplicada
 

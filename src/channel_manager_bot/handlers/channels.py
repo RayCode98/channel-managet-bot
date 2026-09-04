@@ -9,7 +9,13 @@ from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
 from sqlalchemy import select
 
 from ..database import SessionFactory
-from ..keyboards import back_home, channel_detail_menu, channels_menu, welcome_buttons_menu
+from ..keyboards import (
+    back_home,
+    channel_detail_menu,
+    channels_menu,
+    welcome_buttons_menu,
+    welcome_menu,
+)
 from ..models import AuditLog, Channel, ChannelStatus, Membership, WelcomeButton
 from ..repository import (
     can_add_channel,
@@ -18,6 +24,7 @@ from ..repository import (
     get_workspace,
     utcnow,
 )
+from ..services.channel_sync import refresh_channels
 from ..services.welcome import (
     content_from_message,
     parse_welcome_buttons,
@@ -42,11 +49,10 @@ async def owned_channel(session, channel_id: int, user_id: int) -> Channel | Non
     )
 
 
-@router.callback_query(F.data == "channels:list")
-async def list_channels(callback: CallbackQuery) -> None:
+async def render_channels_list(callback: CallbackQuery) -> None:
     async with SessionFactory() as session:
         workspace = await get_workspace(session, callback.from_user.id)
-        channels = await get_active_channels(session, workspace.id)
+        channels = await get_active_channels(session, workspace.id) if workspace else []
     if channels:
         lines = ["📢 <b>Canales conectados</b>", ""]
         for channel in channels:
@@ -59,7 +65,58 @@ async def list_channels(callback: CallbackQuery) -> None:
     else:
         text = "📢 <b>Canales conectados</b>\n\nTodavía no has agregado ningún canal."
     await callback.message.edit_text(text, reply_markup=channels_menu(channels))
+
+
+def channel_detail_text(channel: Channel) -> str:
+    status = "Activa" if channel.welcome_enabled else "Desactivada"
+    farewell_status = "Activa" if channel.farewell_enabled else "Desactivada"
+    autocomplete_status = "Activo" if channel.autocomplete_enabled else "Desactivado"
+    signature_status = "Activa" if channel.signature_enabled else "Desactivada"
+    username = f"@{channel.username}" if channel.username else "Canal privado"
+    members = f"{channel.member_count:,}" if channel.member_count is not None else "No disponible"
+    checked = (
+        channel.last_checked_at.strftime("%d/%m/%Y %H:%M UTC")
+        if channel.last_checked_at
+        else "Pendiente"
+    )
+    return (
+        f"⚙️ <b>{escape(channel.title)}</b>\n\n"
+        f"🔗 <b>Usuario:</b> {escape(username)}\n"
+        f"👥 <b>Miembros:</b> {members}\n"
+        f"🔄 <b>Última sincronización:</b> {checked}\n\n"
+        f"👋 <b>Bienvenida:</b> {status}\n"
+        f"🚪 <b>Despedida:</b> {farewell_status}\n"
+        f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
+        f"✍️ <b>Firma:</b> {signature_status}\n\n"
+        "Estas funciones se administran ahora desde sus botones independientes del menú principal."
+    )
+
+
+def welcome_menu_text(channel: Channel) -> str:
+    return (
+        f"👋 <b>Bienvenida de {escape(channel.title)}</b>\n\n"
+        f"Estado: <b>{'Activa' if channel.welcome_enabled else 'Desactivada'}</b>\n"
+        f"Botones: <b>{len(channel.welcome_buttons)}</b>\n\n"
+        "Puedes configurar contenido, variables, botones y vista previa para este canal."
+    )
+
+
+@router.callback_query(F.data == "channels:list")
+async def list_channels(callback: CallbackQuery) -> None:
+    await render_channels_list(callback)
     await callback.answer()
+
+
+@router.callback_query(F.data == "channels:refresh")
+async def refresh_channels_list(callback: CallbackQuery) -> None:
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+    if workspace is None:
+        await callback.answer("Cuenta no encontrada.", show_alert=True)
+        return
+    await callback.answer("Sincronizando canales…")
+    await refresh_channels(callback.bot, workspace_id=workspace.id)
+    await render_channels_list(callback)
 
 
 @router.callback_query(F.data.startswith("channel:open:"))
@@ -70,22 +127,49 @@ async def open_channel(callback: CallbackQuery) -> None:
     if channel is None:
         await callback.answer("Canal no encontrado.", show_alert=True)
         return
-    button_count = len(channel.welcome_buttons)
-    status = "Activa" if channel.welcome_enabled else "Desactivada"
-    farewell_status = "Activa" if channel.farewell_enabled else "Desactivada"
-    autocomplete_status = "Activo" if channel.autocomplete_enabled else "Desactivado"
-    signature_status = "Activa" if channel.signature_enabled else "Desactivada"
     await callback.message.edit_text(
-        f"⚙️ <b>{escape(channel.title)}</b>\n\n"
-        f"👋 <b>Bienvenida:</b> {status}\n"
-        f"🔗 <b>Botones:</b> {button_count}\n\n"
-        f"🚪 <b>Despedida:</b> {farewell_status}\n\n"
-        f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
-        f"✍️ <b>Firma:</b> {signature_status}\n\n"
-        "La bienvenida se envía al solicitar el ingreso. La despedida se intenta enviar cuando "
-        "Telegram informa que un suscriptor abandonó el canal. El autocompletado cubre "
-        "publicaciones sin descripción y la firma se agrega siempre al final.",
+        channel_detail_text(channel),
         reply_markup=channel_detail_menu(channel),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("channel:refresh:"))
+async def refresh_one_channel(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    await callback.answer("Sincronizando canal…")
+    await refresh_channels(
+        callback.bot,
+        workspace_id=channel.workspace_id,
+        channel_ids={channel_id},
+    )
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await render_channels_list(callback)
+        return
+    await callback.message.edit_text(
+        channel_detail_text(channel),
+        reply_markup=channel_detail_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("welcome:menu:"))
+async def show_welcome_menu(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        welcome_menu_text(channel),
+        reply_markup=welcome_menu(channel),
     )
     await callback.answer()
 
@@ -145,7 +229,7 @@ async def save_channel_welcome(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         "✅ Bienvenida guardada y activada. Las variables se reemplazarán para cada persona.",
-        reply_markup=channel_detail_menu(channel),
+        reply_markup=welcome_menu(channel),
     )
 
 
@@ -211,7 +295,7 @@ async def receive_welcome_buttons(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ Botones actualizados: <b>{len(parsed_buttons)}</b>.",
-        reply_markup=channel_detail_menu(channel),
+        reply_markup=welcome_menu(channel),
     )
 
 
@@ -279,8 +363,8 @@ async def delete_welcome_button(callback: CallbackQuery) -> None:
         )
     else:
         await callback.message.edit_text(
-            f"⚙️ <b>{escape(channel.title)}</b>\n\nLa bienvenida quedó sin botones.",
-            reply_markup=channel_detail_menu(channel),
+            f"👋 <b>{escape(channel.title)}</b>\n\nLa bienvenida quedó sin botones.",
+            reply_markup=welcome_menu(channel),
         )
     await callback.answer("Botón eliminado")
 
@@ -323,7 +407,10 @@ async def toggle_channel_welcome(callback: CallbackQuery) -> None:
             return
         channel.welcome_enabled = not channel.welcome_enabled
         await session.commit()
-    await callback.message.edit_reply_markup(reply_markup=channel_detail_menu(channel))
+    await callback.message.edit_text(
+        welcome_menu_text(channel),
+        reply_markup=welcome_menu(channel),
+    )
     await callback.answer("Bienvenida actualizada")
 
 
@@ -346,8 +433,8 @@ async def clear_channel_welcome(callback: CallbackQuery) -> None:
         channel.welcome_buttons.clear()
         await session.commit()
     await callback.message.edit_text(
-        f"⚙️ <b>{escape(channel.title)}</b>\n\nLa bienvenida personalizada fue eliminada.",
-        reply_markup=channel_detail_menu(channel),
+        f"👋 <b>{escape(channel.title)}</b>\n\nLa bienvenida personalizada fue eliminada.",
+        reply_markup=welcome_menu(channel),
     )
     await callback.answer()
 

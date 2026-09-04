@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     default_timezone: str = "America/Mexico_City"
     max_channels_per_workspace: int = 30
     worker_poll_seconds: float = 2.0
+    channel_refresh_hours: float = Field(default=6.0, gt=0, le=168)
 
     @field_validator("platform_admin_ids", mode="before")
     @classmethod
