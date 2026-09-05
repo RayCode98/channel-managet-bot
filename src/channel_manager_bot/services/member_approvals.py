@@ -48,9 +48,7 @@ async def pending_join_count(session, channel_id: int) -> int:
             .where(
                 JoinRequestEvent.channel_id == channel_id,
                 JoinRequestEvent.approved.is_(False),
-                JoinRequestEvent.outcome.in_(
-                    PENDING_APPROVAL_OUTCOMES | {"approval_processing"}
-                ),
+                JoinRequestEvent.outcome.in_(PENDING_APPROVAL_OUTCOMES | {"approval_processing"}),
             )
         )
         or 0

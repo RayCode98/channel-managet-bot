@@ -70,8 +70,7 @@ async def render_channels_list(callback: CallbackQuery) -> None:
         text = "\n".join(lines)
     else:
         text = (
-            "📚 <b>Canales y grupos vinculados</b>\n\n"
-            "Todavía no has agregado ningún canal o grupo."
+            "📚 <b>Canales y grupos vinculados</b>\n\nTodavía no has agregado ningún canal o grupo."
         )
     try:
         await callback.message.edit_text(text, reply_markup=channels_menu(channels))
@@ -482,9 +481,7 @@ async def add_channel_instructions(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.my_chat_member(
-    F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
-)
+@router.my_chat_member(F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}))
 async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
     actor = event.from_user
     chat_type = normalize_chat_type(event.chat.type)
@@ -503,8 +500,10 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
         is_group = chat_type in {ChatType.GROUP.value, ChatType.SUPERGROUP.value}
         is_owner = new_member.status == ChatMemberStatus.CREATOR
         is_admin = is_owner or new_member.status == ChatMemberStatus.ADMINISTRATOR
-        can_post = is_admin if is_group else is_owner or bool(
-            getattr(new_member, "can_post_messages", False)
+        can_post = (
+            is_admin
+            if is_group
+            else is_owner or bool(getattr(new_member, "can_post_messages", False))
         )
         can_invite = is_owner or (
             bool(getattr(new_member, "can_invite_users", False)) if is_admin else False

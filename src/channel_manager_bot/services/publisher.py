@@ -54,6 +54,8 @@ async def create_next_recurrence(
         source_message_id=publication.source_message_id,
         source_content_type=publication.source_content_type,
         source_text_html=publication.source_text_html,
+        source_text_plain=publication.source_text_plain,
+        source_entities_json=publication.source_entities_json,
         preview=publication.preview,
         status=PublicationStatus.scheduled,
         scheduled_at=next_recurrence_at(

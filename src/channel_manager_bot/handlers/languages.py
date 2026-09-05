@@ -34,8 +34,7 @@ async def change_language(callback: CallbackQuery) -> None:
         await session.commit()
     set_current_language(code)
     await callback.message.edit_text(
-        f"🌐 <b>{tr('language_title')}</b>\n\n"
-        f"✅ {tr('language_saved', language=option.name)}",
+        f"🌐 <b>{tr('language_title')}</b>\n\n✅ {tr('language_saved', language=option.name)}",
         reply_markup=language_menu(),
     )
     await callback.answer(tr("language_saved", language=option.name))

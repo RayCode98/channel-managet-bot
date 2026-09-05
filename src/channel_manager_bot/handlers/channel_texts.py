@@ -11,6 +11,12 @@ from ..keyboards import channel_post_text_menu
 from ..models import Channel, ChannelStatus
 from ..repository import get_workspace
 from ..services.post_text import MAX_CHANNEL_TEXT_LENGTH, telegram_text_length
+from ..services.rich_text import (
+    custom_emoji_count,
+    message_text_and_entities,
+    serialize_entities,
+    stored_custom_emoji_count,
+)
 from ..states import ChannelPostTextFlow
 
 router = Router(name="channel_texts")
@@ -60,11 +66,19 @@ def channel_text_menu_text(channel: Channel, kind: str) -> str:
             "con una línea en blanco."
         )
     current = configured_text if configured_text else "<i>Sin texto configurado.</i>"
+    entities_json = (
+        channel.autocomplete_entities_json if kind == "auto" else channel.signature_entities_json
+    )
+    premium_count = stored_custom_emoji_count(entities_json, configured_text)
+    premium_line = (
+        f"\n✨ <b>Emojis premium:</b> {premium_count} detectados" if premium_count else ""
+    )
     return (
         f"{'🪄' if kind == 'auto' else '✍️'} <b>{title} de {escape(channel.title)}</b>\n\n"
         f"Estado: <b>{'Activo' if enabled else 'Desactivado'}</b>\n\n"
         f"{explanation}\n\n"
         f"<b>Texto actual:</b>\n{current}"
+        f"{premium_line}"
     )
 
 
@@ -108,7 +122,8 @@ async def ask_channel_text(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.answer(
         f"Envía el nuevo texto para <b>{escape(channel.title)}</b>.\n\n"
         f"{detail}\n"
-        f"Puedes utilizar formato de Telegram. Máximo: <b>{MAX_CHANNEL_TEXT_LENGTH}</b> caracteres."
+        "Puedes utilizar formato de Telegram y emojis premium desde su selector. "
+        f"Máximo: <b>{MAX_CHANNEL_TEXT_LENGTH}</b> caracteres."
     )
     await callback.answer()
 
@@ -131,18 +146,28 @@ async def save_channel_text(message: Message, state: FSMContext) -> None:
             await state.clear()
             await message.answer("Canal no encontrado.")
             return
-        rich_text = message.html_text.strip()
+        rich_text = message.html_text
+        plain_text_snapshot, entities = message_text_and_entities(message)
+        entities_json = serialize_entities(entities)
         if kind == "auto":
             channel.autocomplete_text = rich_text
+            channel.autocomplete_text_plain = plain_text_snapshot
+            channel.autocomplete_entities_json = entities_json
             channel.autocomplete_enabled = True
         else:
             channel.signature_text = rich_text
+            channel.signature_text_plain = plain_text_snapshot
+            channel.signature_entities_json = entities_json
             channel.signature_enabled = True
         await session.commit()
     await state.clear()
     label = "Autocompletado" if kind == "auto" else "Firma"
+    premium_count = custom_emoji_count(entities)
+    premium_notice = (
+        f"\n✨ Se conservarán <b>{premium_count}</b> emojis premium." if premium_count else ""
+    )
     await message.answer(
-        f"✅ {label} guardado y activado.",
+        f"✅ {label} guardado y activado.{premium_notice}",
         reply_markup=channel_post_text_menu(channel, kind),
     )
 
@@ -225,9 +250,13 @@ async def clear_channel_text(callback: CallbackQuery) -> None:
         if kind == "auto":
             channel.autocomplete_enabled = False
             channel.autocomplete_text = None
+            channel.autocomplete_text_plain = None
+            channel.autocomplete_entities_json = None
         else:
             channel.signature_enabled = False
             channel.signature_text = None
+            channel.signature_text_plain = None
+            channel.signature_entities_json = None
         await session.commit()
     label = "autocompletado" if kind == "auto" else "firma"
     await callback.message.edit_text(

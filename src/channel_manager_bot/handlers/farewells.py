@@ -316,9 +316,7 @@ async def clear_farewell(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.chat_member(
-    F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP})
-)
+@router.chat_member(F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}))
 async def member_left_channel(event: ChatMemberUpdated, bot: Bot) -> None:
     departed_user = event.new_chat_member.user
     if not is_voluntary_channel_departure(event):

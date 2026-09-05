@@ -65,8 +65,7 @@ def rule_text(
     )
     destination_lines = (
         "\n".join(
-            f"• {'👥' if item.chat_type in {'group', 'supergroup'} else '📢'} "
-            f"{escape(item.title)}"
+            f"• {'👥' if item.chat_type in {'group', 'supergroup'} else '📢'} {escape(item.title)}"
             for item in destinations
         )
         if destinations
@@ -107,9 +106,7 @@ async def show_relay_sources(callback: CallbackQuery) -> None:
         text += "\n\nTodavía no hay canales o grupos vinculados."
     await callback.message.edit_text(
         text,
-        reply_markup=relay_sources_menu(
-            channels, {rule.source_chat_id: rule for rule in rules}
-        ),
+        reply_markup=relay_sources_menu(channels, {rule.source_chat_id: rule for rule in rules}),
     )
     await callback.answer()
 
@@ -121,9 +118,7 @@ async def show_relay_rule(callback: CallbackQuery) -> None:
         workspace = await get_workspace(session, callback.from_user.id)
         source = await owned_channel(session, source_chat_id, callback.from_user.id)
         rule = await load_rule(session, source_chat_id, workspace.id) if workspace else None
-        destination_ids = (
-            [item.destination_chat_id for item in rule.destinations] if rule else []
-        )
+        destination_ids = [item.destination_chat_id for item in rule.destinations] if rule else []
         destinations = (
             list(
                 await session.scalars(
@@ -279,9 +274,7 @@ async def toggle_relay_destination(callback: CallbackQuery) -> None:
                     "Esa relación formaría un ciclo de reenvíos.", show_alert=True
                 )
                 return
-            rule.destinations.append(
-                RelayDestination(destination_chat_id=destination_chat_id)
-            )
+            rule.destinations.append(RelayDestination(destination_chat_id=destination_chat_id))
             action = "added"
         session.add(
             AuditLog(
@@ -289,8 +282,7 @@ async def toggle_relay_destination(callback: CallbackQuery) -> None:
                 actor_user_id=callback.from_user.id,
                 action=f"relay.destination_{action}",
                 details=(
-                    f"source_chat_id={source_chat_id};"
-                    f"destination_chat_id={destination_chat_id}"
+                    f"source_chat_id={source_chat_id};destination_chat_id={destination_chat_id}"
                 ),
             )
         )
@@ -335,10 +327,7 @@ async def toggle_relay_mode(callback: CallbackQuery) -> None:
                 workspace_id=workspace.id,
                 actor_user_id=callback.from_user.id,
                 action="relay.forward_header_toggled",
-                details=(
-                    f"source_chat_id={source_chat_id};"
-                    f"enabled={rule.preserve_forward_header}"
-                ),
+                details=(f"source_chat_id={source_chat_id};enabled={rule.preserve_forward_header}"),
             )
         )
         await session.commit()
@@ -451,9 +440,7 @@ async def relay_source_messages(
                         destination_chat_id=destination_chat_id,
                         succeeded=False,
                     )
-                    .on_conflict_do_nothing(
-                        constraint="uq_relay_delivery_message_destination"
-                    )
+                    .on_conflict_do_nothing(constraint="uq_relay_delivery_message_destination")
                     .returning(RelayDelivery.id)
                 )
                 if await session.scalar(statement):

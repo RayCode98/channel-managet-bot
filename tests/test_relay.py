@@ -43,11 +43,7 @@ def test_relay_markup_keeps_only_public_url_buttons_and_rows():
         ["Web"],
         ["Canal"],
     ]
-    assert all(
-        button.callback_data is None
-        for row in copied.inline_keyboard
-        for button in row
-    )
+    assert all(button.callback_data is None for row in copied.inline_keyboard for button in row)
 
 
 def test_recent_relay_output_is_remembered_for_loop_protection():

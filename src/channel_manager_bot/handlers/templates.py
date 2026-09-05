@@ -24,6 +24,12 @@ from ..keyboards import (
 from ..models import ContentTemplate, Publication, PublicationButton, TemplateButton
 from ..repository import get_active_channels, get_workspace
 from ..services.post_text import publication_content_type, publication_text_html
+from ..services.rich_text import (
+    custom_emoji_count,
+    message_text_and_entities,
+    serialize_entities,
+    stored_custom_emoji_count,
+)
 from ..states import PublicationFlow, TemplateFlow
 
 router = Router(name="templates")
@@ -47,11 +53,18 @@ async def owned_template(session, template_id: str, user_id: int) -> ContentTemp
 
 async def show_template(callback: CallbackQuery, template: ContentTemplate) -> None:
     preview = escape((template.preview or "Contenido multimedia").replace("\n", " ")[:200])
+    premium_count = stored_custom_emoji_count(
+        template.source_entities_json, template.source_text_html
+    )
+    premium_line = (
+        f"✨ <b>Emojis premium:</b> {premium_count} detectados\n" if premium_count else ""
+    )
     await callback.message.edit_text(
         f"🧩 <b>{escape(template.name)}</b>\n\n"
         f"📝 {preview}\n"
         f"🔗 <b>Botones:</b> {len(template.buttons)}\n"
         f"🗑 <b>Autoeliminación:</b> {ttl_label(template.delete_after_minutes)}\n\n"
+        f"{premium_line}"
         "🔁 La recurrencia se elige después de seleccionar los destinos.",
         reply_markup=template_detail_menu(
             template.id, len(template.buttons), template.delete_after_minutes
@@ -106,7 +119,8 @@ async def receive_template_name(message: Message, state: FSMContext) -> None:
     await state.update_data(template_name=name)
     await state.set_state(TemplateFlow.waiting_content)
     await message.answer(
-        "Ahora envía el contenido de la plantilla: texto enriquecido, foto, video, animación, audio o documento."
+        "Ahora envía el contenido de la plantilla: texto enriquecido, foto, video, animación, "
+        "audio o documento. Puedes insertar emojis premium desde el selector de Telegram."
     )
 
 
@@ -126,6 +140,8 @@ async def receive_template_content(message: Message, state: FSMContext) -> None:
         await message.answer("Ese contenido no es compatible. Envía texto o contenido multimedia.")
         return
     data = await state.get_data()
+    source_text_plain, source_entities = message_text_and_entities(message)
+    premium_count = custom_emoji_count(source_entities)
     async with SessionFactory() as session:
         workspace = await get_workspace(session, message.from_user.id)
         template = ContentTemplate(
@@ -136,13 +152,21 @@ async def receive_template_content(message: Message, state: FSMContext) -> None:
             source_message_id=message.message_id,
             source_content_type=publication_content_type(message),
             source_text_html=publication_text_html(message),
+            source_text_plain=source_text_plain,
+            source_entities_json=serialize_entities(source_entities),
             preview=(message.text or message.caption or "Contenido multimedia")[:500],
         )
         session.add(template)
         await session.commit()
     await state.clear()
+    premium_notice = (
+        f"\n✨ Detectamos <b>{premium_count}</b> emoji{'s' if premium_count != 1 else ''} premium."
+        if premium_count
+        else ""
+    )
     await message.answer(
-        "✅ Plantilla creada. Ya puedes añadir botones, autoeliminación o utilizarla.",
+        "✅ Plantilla creada. Ya puedes añadir botones, autoeliminación o utilizarla."
+        f"{premium_notice}",
         reply_markup=template_detail_menu(template.id, 0, None),
     )
 
@@ -352,9 +376,7 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
             return
         channels = await get_active_channels(session, template.workspace_id)
         if not channels:
-            await callback.answer(
-                "Primero conecta al menos un canal o grupo.", show_alert=True
-            )
+            await callback.answer("Primero conecta al menos un canal o grupo.", show_alert=True)
             return
         publication = Publication(
             workspace_id=template.workspace_id,
@@ -363,6 +385,8 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
             source_message_id=template.source_message_id,
             source_content_type=template.source_content_type,
             source_text_html=template.source_text_html,
+            source_text_plain=template.source_text_plain,
+            source_entities_json=template.source_entities_json,
             preview=template.preview,
             delete_after_minutes=template.delete_after_minutes,
         )

@@ -67,9 +67,7 @@ def main_menu() -> InlineKeyboardMarkup:
 
 def back_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]]
     )
 
 
@@ -84,9 +82,7 @@ def language_menu() -> InlineKeyboardMarkup:
         ]
         for item in LANGUAGES
     ]
-    rows.append(
-        [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
-    )
+    rows.append([InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -102,11 +98,7 @@ def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup
     ]
     rows.extend(
         [
-            [
-                InlineKeyboardButton(
-                    text="➕ Agregar canal o grupo", callback_data="channels:add"
-                )
-            ],
+            [InlineKeyboardButton(text="➕ Agregar canal o grupo", callback_data="channels:add")],
             [InlineKeyboardButton(text="🔄 Sincronizar ahora", callback_data="channels:refresh")],
             [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
         ]
@@ -153,10 +145,9 @@ def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardM
     rows = [
         [
             InlineKeyboardButton(
-                text=(
-                    f"{'✅' if enabled(channel) else '❌'} "
-                    f"{chat_icon(channel)} {channel.title}"
-                )[:64],
+                text=(f"{'✅' if enabled(channel) else '❌'} {chat_icon(channel)} {channel.title}")[
+                    :64
+                ],
                 callback_data=destination(channel),
             )
         ]
@@ -362,9 +353,7 @@ def relay_targets_menu(
                     f"{'✅' if channel.telegram_chat_id in selected else '▫️'} "
                     f"{chat_icon(channel)} {channel.title}"
                 )[:64],
-                callback_data=(
-                    f"relay:dest:{source_chat_id}:{channel.telegram_chat_id}"
-                ),
+                callback_data=(f"relay:dest:{source_chat_id}:{channel.telegram_chat_id}"),
             )
         ]
         for channel in channels
@@ -374,19 +363,14 @@ def relay_targets_menu(
         [
             InlineKeyboardButton(
                 text=(
-                    "🏷 Mostrar «Reenviado de»: "
-                    f"{'✅ Sí' if preserve_forward_header else '❌ No'}"
+                    f"🏷 Mostrar «Reenviado de»: {'✅ Sí' if preserve_forward_header else '❌ No'}"
                 ),
                 callback_data=f"relay:mode:{source_chat_id}",
             )
         ]
     )
     rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ Configuración", callback_data=f"relay:menu:{source_chat_id}"
-            )
-        ]
+        [InlineKeyboardButton(text="⬅️ Configuración", callback_data=f"relay:menu:{source_chat_id}")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -420,9 +404,7 @@ def members_channels_menu(
         ]
         for channel in channels
     ]
-    rows.append(
-        [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]
-    )
+    rows.append([InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -476,11 +458,7 @@ def member_interval_menu(channel_id: int) -> InlineKeyboardMarkup:
         for label, hours in choices
     ]
     rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ Configuración", callback_data=f"members:chat:{channel_id}"
-            )
-        ]
+        [InlineKeyboardButton(text="⬅️ Configuración", callback_data=f"members:chat:{channel_id}")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

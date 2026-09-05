@@ -9,7 +9,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Conexión automática de canales, grupos y supergrupos cuando el bot es promovido a administrador.
 - Verificación del permiso para publicar y alerta si el bot pierde acceso.
 - Publicaciones de texto enriquecido, foto, video, animación, audio, voz o documento.
-- Conservación del formato y los emojis mediante copia nativa del mensaje original.
+- Conservación del formato y de los emojis premium mediante copia nativa y entidades `custom_emoji`.
 - Hasta 20 botones URL por publicación.
 - Selección de uno, varios o todos los canales y grupos conectados.
 - Envío inmediato o programación con zona horaria del cliente.
@@ -114,7 +114,13 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.10.0, sigue [`UPGRADE_V0.10.1.md`](UPGRADE_V0.10.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.10.1, sigue [`UPGRADE_V0.11.0.md`](UPGRADE_V0.11.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+
+## Emojis premium
+
+Al crear una publicación o plantilla, el usuario puede insertar emojis premium directamente desde el selector de Telegram. El bot detecta sus entidades `custom_emoji`, guarda los identificadores originales y muestra la cantidad reconocida. Las vistas previas y los envíos sin cambios utilizan la copia nativa del mensaje.
+
+Cuando una firma o un autocompletado modifica el contenido, el bot combina el texto y las entidades conservando sus desplazamientos UTF-16. Telegram aplica sus propias condiciones de uso de emojis personalizados a los mensajes enviados por bots; si una cuenta o destino no cumple esas condiciones, Telegram puede rechazar el envío. Esta aplicación no intenta evadir esa restricción.
 
 ## Cómo funciona la programación
 
@@ -143,7 +149,7 @@ Ambas funciones tienen su propio botón en el menú principal. Después se elige
 
 Cuando están activas las dos funciones y el contenido no tiene descripción, el resultado es `autocompletado + firma`. Cada texto admite hasta 500 unidades de texto de Telegram. La configuración se evalúa al momento de publicar, por lo que cada canal puede producir una versión distinta del mismo contenido.
 
-Las publicaciones y plantillas creadas antes de v0.6.0 se copian sin cambios para proteger su formato original. Crea nuevamente una plantilla antigua si deseas que utilice autocompletado y firma.
+Las publicaciones y plantillas creadas antes de v0.6.0 se copian sin cambios para proteger su formato original. Los elementos anteriores a v0.11.0 continúan usando su copia HTML; vuelve a crearlos si deseas almacenar sus entidades premium de forma explícita.
 
 Consulta la tabla completa de comportamiento en [`AUTOCOMPLETADO_Y_FIRMA.md`](AUTOCOMPLETADO_Y_FIRMA.md).
 

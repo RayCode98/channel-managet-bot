@@ -316,7 +316,8 @@ def test_member_menus_offer_per_chat_modes_intervals_and_batch():
         for button in row
     ]
     interval_callbacks = [
-        row[0].callback_data for row in member_interval_menu(channel.telegram_chat_id).inline_keyboard
+        row[0].callback_data
+        for row in member_interval_menu(channel.telegram_chat_id).inline_keyboard
     ]
 
     assert member_approval_label(channel) == "🕒 Cada 6 h"

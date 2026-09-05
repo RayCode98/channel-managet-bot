@@ -109,9 +109,7 @@ def upgrade() -> None:
             name="uq_relay_destination_rule_chat",
         ),
     )
-    op.create_index(
-        "ix_relay_destinations_relay_rule_id", "relay_destinations", ["relay_rule_id"]
-    )
+    op.create_index("ix_relay_destinations_relay_rule_id", "relay_destinations", ["relay_rule_id"])
     op.create_index(
         "ix_relay_destinations_destination_chat_id",
         "relay_destinations",
@@ -142,9 +140,7 @@ def upgrade() -> None:
             name="uq_relay_delivery_message_destination",
         ),
     )
-    op.create_index(
-        "ix_relay_deliveries_relay_rule_id", "relay_deliveries", ["relay_rule_id"]
-    )
+    op.create_index("ix_relay_deliveries_relay_rule_id", "relay_deliveries", ["relay_rule_id"])
     op.create_index(
         "ix_relay_deliveries_destination_chat_id",
         "relay_deliveries",
@@ -187,9 +183,7 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["workspace_id"], ["workspaces.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("telegram_chat_id"),
     )
-    op.create_index(
-        "ix_requirement_chats_workspace_id", "requirement_chats", ["workspace_id"]
-    )
+    op.create_index("ix_requirement_chats_workspace_id", "requirement_chats", ["workspace_id"])
     op.execute(
         sa.text(
             """

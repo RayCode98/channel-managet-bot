@@ -34,6 +34,12 @@ from ..models import (
 )
 from ..repository import get_active_channels, get_workspace, utcnow
 from ..services.post_text import publication_content_type, publication_text_html
+from ..services.rich_text import (
+    custom_emoji_count,
+    message_text_and_entities,
+    serialize_entities,
+    stored_custom_emoji_count,
+)
 from ..states import PublicationFlow
 
 router = Router(name="publications")
@@ -54,11 +60,18 @@ async def owned_publication(session, publication_id: str, user_id: int) -> Publi
 
 async def show_publication_editor(callback: CallbackQuery, publication: Publication) -> None:
     preview = escape((publication.preview or "Contenido multimedia").replace("\n", " ")[:200])
+    premium_count = stored_custom_emoji_count(
+        publication.source_entities_json, publication.source_text_html
+    )
+    premium_line = (
+        f"\n✨ <b>Emojis premium:</b> {premium_count} detectados" if premium_count else ""
+    )
     await callback.message.edit_text(
         "📝 <b>Configurar publicación</b>\n\n"
         f"{preview}\n\n"
         f"🔗 <b>Botones:</b> {len(publication.buttons)}\n"
-        f"🗑 <b>Autoeliminación:</b> {ttl_label(publication.delete_after_minutes)}",
+        f"🗑 <b>Autoeliminación:</b> {ttl_label(publication.delete_after_minutes)}"
+        f"{premium_line}",
         reply_markup=composer_menu(
             publication.id,
             len(publication.buttons),
@@ -73,7 +86,8 @@ async def new_publication(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.message.edit_text(
         "📝 <b>Nueva publicación</b>\n\n"
         "Envíame el contenido exactamente como debe aparecer: texto con formato, foto, video, "
-        "animación, audio o documento. Telegram conservará sus entidades y emojis.\n\n"
+        "animación, audio o documento. Puedes insertar emojis premium directamente desde el "
+        "selector de Telegram; el bot conservará sus entidades.\n\n"
         "Envía /cancel para salir.",
         reply_markup=back_home(),
     )
@@ -97,6 +111,8 @@ async def receive_content(message: Message, state: FSMContext) -> None:
             "Ese tipo de contenido todavía no es compatible. Envíame texto o un archivo multimedia."
         )
         return
+    source_text_plain, source_entities = message_text_and_entities(message)
+    premium_count = custom_emoji_count(source_entities)
     async with SessionFactory() as session:
         workspace = await get_workspace(session, message.from_user.id)
         publication = Publication(
@@ -106,14 +122,23 @@ async def receive_content(message: Message, state: FSMContext) -> None:
             source_message_id=message.message_id,
             source_content_type=publication_content_type(message),
             source_text_html=publication_text_html(message),
+            source_text_plain=source_text_plain,
+            source_entities_json=serialize_entities(source_entities),
             preview=(message.text or message.caption or "Publicación multimedia")[:500],
         )
         session.add(publication)
         await session.commit()
         publication_id = publication.id
     await state.clear()
+    premium_notice = (
+        f"\n✨ Detectamos <b>{premium_count}</b> emoji{'s' if premium_count != 1 else ''} "
+        "premium y conservamos sus identificadores."
+        if premium_count
+        else ""
+    )
     await message.answer(
-        "✅ Contenido guardado. Ahora puedes agregar botones o elegir los destinos.",
+        "✅ Contenido guardado. Ahora puedes agregar botones o elegir los destinos."
+        f"{premium_notice}",
         reply_markup=composer_menu(publication_id, 0),
     )
 

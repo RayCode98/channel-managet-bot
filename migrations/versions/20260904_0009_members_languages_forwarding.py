@@ -43,12 +43,8 @@ def upgrade() -> None:
         ),
     )
     op.add_column("channels", sa.Column("join_approval_interval_hours", sa.Integer()))
-    op.add_column(
-        "channels", sa.Column("join_approval_next_run_at", sa.DateTime(timezone=True))
-    )
-    op.add_column(
-        "channels", sa.Column("join_approval_last_run_at", sa.DateTime(timezone=True))
-    )
+    op.add_column("channels", sa.Column("join_approval_next_run_at", sa.DateTime(timezone=True)))
+    op.add_column("channels", sa.Column("join_approval_last_run_at", sa.DateTime(timezone=True)))
     op.create_check_constraint(
         "ck_channels_join_approval_mode",
         "channels",
@@ -105,9 +101,7 @@ def downgrade() -> None:
     op.drop_column("join_request_events", "approval_attempts")
     op.drop_column("join_request_events", "approval_claimed_at")
     op.drop_index("ix_channels_join_approval_next_run_at", table_name="channels")
-    op.drop_constraint(
-        "ck_channels_join_approval_interval", "channels", type_="check"
-    )
+    op.drop_constraint("ck_channels_join_approval_interval", "channels", type_="check")
     op.drop_constraint("ck_channels_join_approval_mode", "channels", type_="check")
     op.drop_column("channels", "join_approval_last_run_at")
     op.drop_column("channels", "join_approval_next_run_at")

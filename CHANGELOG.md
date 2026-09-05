@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.11.0
+
+- Detecta emojis premium (`custom_emoji`) cuando el usuario crea una publicación o plantilla.
+- Conserva el `custom_emoji_id` y las demás entidades originales en una instantánea JSON.
+- Usa copia nativa cuando el contenido no requiere modificaciones, la ruta más fiel para conservar formato y emojis premium.
+- Reconstruye texto y pies multimedia con entidades explícitas cuando se añade autocompletado o firma.
+- Calcula los desplazamientos de entidades en unidades UTF-16, incluido texto con emojis y caracteres suplementarios.
+- Permite utilizar emojis premium nuevos dentro del autocompletado y la firma de cada canal o grupo.
+- Muestra cuántos emojis premium fueron detectados al guardar y en las pantallas de publicación, plantilla y texto automático.
+- Mantiene compatibilidad con publicaciones, plantillas, firmas y autocompletados creados en versiones anteriores mediante el respaldo HTML existente.
+- Las publicaciones recurrentes y las creadas desde plantillas heredan también las entidades premium.
+- Migración incremental `20260904_0010`, compatible con instalaciones anteriores.
+
 ## 0.10.1
 
 - Corrige el registro de canales, grupos y supergrupos cuando aiogram entrega el tipo de chat como texto en lugar de un enum.

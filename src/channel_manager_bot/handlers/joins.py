@@ -153,9 +153,7 @@ async def process_join_request(request: ChatJoinRequest, bot: Bot) -> None:
             await session.commit()
             return
         event.outcome = (
-            "pending_scheduled"
-            if channel.join_approval_mode == "scheduled"
-            else "pending_manual"
+            "pending_scheduled" if channel.join_approval_mode == "scheduled" else "pending_manual"
         )
         await session.commit()
 

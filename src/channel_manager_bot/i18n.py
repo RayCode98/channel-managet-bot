@@ -448,9 +448,7 @@ def set_current_language(code: str):
 
 def tr(key: str, locale: str | None = None, **values) -> str:
     code = normalize_language(locale or current_language())
-    template = TRANSLATIONS.get(code, TRANSLATIONS["es"]).get(
-        key, TRANSLATIONS["es"].get(key, key)
-    )
+    template = TRANSLATIONS.get(code, TRANSLATIONS["es"]).get(key, TRANSLATIONS["es"].get(key, key))
     return template.format(**values)
 
 

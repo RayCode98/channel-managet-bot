@@ -9,9 +9,7 @@ def test_next_scheduled_run_advances_past_missed_intervals():
     scheduled = datetime(2026, 9, 4, 6, tzinfo=UTC)
     now = datetime(2026, 9, 4, 20, tzinfo=UTC)
 
-    assert next_scheduled_run(scheduled, now, 6) == datetime(
-        2026, 9, 5, 0, tzinfo=UTC
-    )
+    assert next_scheduled_run(scheduled, now, 6) == datetime(2026, 9, 5, 0, tzinfo=UTC)
 
 
 def test_next_scheduled_run_rejects_unlisted_interval():
