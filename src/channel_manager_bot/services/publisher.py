@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -16,9 +16,11 @@ from ..models import (
     PublicationChannel,
     PublicationStatus,
     PublishedMessage,
+    RelayDelivery,
 )
 from ..repository import utcnow
-from .post_text import send_publication_to_channel
+from .deletion import delete_scheduled_delivery
+from .post_text import effective_channel_post_markup, send_publication_to_channel
 from .recurrence import next_recurrence_at
 from .relay import relay_confirmed_publication
 
@@ -183,7 +185,12 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                     publication_id=publication.id,
                     source_chat_id=channel.telegram_chat_id,
                     source_message_id=existing.telegram_message_id,
-                    reply_markup=markup,
+                    reply_markup=effective_channel_post_markup(
+                        publication,
+                        channel,
+                        markup,
+                    ),
+                    delete_at=existing.delete_at,
                 )
                 continue
             try:
@@ -226,7 +233,8 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 publication_id=publication.id,
                 source_chat_id=channel.telegram_chat_id,
                 source_message_id=relay_source_message_id,
-                reply_markup=markup,
+                reply_markup=sent.reply_markup if relay_source_message_id is not None else None,
+                delete_at=result.delete_at if relay_source_message_id is not None else None,
             )
 
         if successes == len(channels) and channels:
@@ -259,7 +267,7 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
 
 async def delete_due_messages(bot: Bot, batch_size: int = 20) -> int:
     async with SessionFactory() as session:
-        messages = list(
+        primary_messages = list(
             await session.scalars(
                 select(PublishedMessage)
                 .where(
@@ -274,25 +282,31 @@ async def delete_due_messages(bot: Bot, batch_size: int = 20) -> int:
                 .limit(batch_size)
             )
         )
+        relay_messages = list(
+            await session.scalars(
+                select(RelayDelivery)
+                .where(
+                    RelayDelivery.succeeded.is_(True),
+                    RelayDelivery.telegram_message_id.is_not(None),
+                    RelayDelivery.delete_at.is_not(None),
+                    RelayDelivery.delete_at <= utcnow(),
+                    RelayDelivery.deleted_at.is_(None),
+                    RelayDelivery.delete_attempts < 5,
+                )
+                .order_by(RelayDelivery.delete_at)
+                .limit(batch_size)
+            )
+        )
         deleted = 0
-        for message in messages:
-            try:
-                await bot.delete_message(message.channel_id, message.telegram_message_id)
-                message.deleted_at = utcnow()
-                message.delete_error = None
-                deleted += 1
-            except TelegramBadRequest as exc:
-                if "message to delete not found" in str(exc).lower():
-                    message.deleted_at = utcnow()
-                    message.delete_error = None
-                    deleted += 1
-                else:
-                    message.delete_attempts += 1
-                    message.delete_error = str(exc)[:2000]
-                    message.delete_at = utcnow() + timedelta(minutes=10)
-            except TelegramAPIError as exc:
-                message.delete_attempts += 1
-                message.delete_error = str(exc)[:2000]
-                message.delete_at = utcnow() + timedelta(minutes=10)
+        deliveries = [
+            *((message, message.channel_id) for message in primary_messages),
+            *((message, message.destination_chat_id) for message in relay_messages),
+        ]
+        for message, chat_id in deliveries:
+            deleted += await delete_scheduled_delivery(
+                bot,
+                message,
+                chat_id=chat_id,
+            )
             await session.commit()
         return deleted

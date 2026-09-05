@@ -19,9 +19,12 @@ El autocompletado nunca reemplaza una descripción existente. La firma siempre o
 1. Abre **Autocompletado** o **Firmas** desde el menú principal.
 2. Selecciona el canal o grupo.
 3. Envía el texto con el formato que deseas conservar.
-4. Usa **Vista previa** para comprobar el resultado.
+4. En Autocompletado, utiliza **Agregar botón** para guardar hasta 20 enlaces.
+5. Usa **Vista previa** para comprobar el texto, la firma y los botones.
 
-Cada opción permite actualizar el texto, activarlo o desactivarlo temporalmente y borrarlo. El límite es de 500 unidades de texto de Telegram por configuración.
+Cada opción permite actualizar el texto, activarlo o desactivarlo temporalmente y borrarlo. Los botones automáticos pueden administrarse y eliminarse individualmente. El límite es de 500 unidades de texto de Telegram por configuración.
+
+Los botones de autocompletado se agregan debajo de los botones propios del post o plantilla. Al igual que el texto automático, solamente aparecen cuando la publicación no contiene texto o descripción. Si existe una descripción original, no se agrega ni el texto ni sus botones.
 
 ## Publicaciones con varios destinos
 

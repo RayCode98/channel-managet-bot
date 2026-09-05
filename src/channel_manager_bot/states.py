@@ -23,6 +23,8 @@ class ChannelFarewellFlow(StatesGroup):
 
 class ChannelPostTextFlow(StatesGroup):
     waiting_text = State()
+    waiting_button_text = State()
+    waiting_button_url = State()
 
 
 class TemplateFlow(StatesGroup):

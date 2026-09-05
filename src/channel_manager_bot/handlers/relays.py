@@ -440,6 +440,7 @@ async def relay_source_messages(
         # A publication managed by the worker may also include one of the relay
         # destinations explicitly. Do not race the worker or create a duplicate copy.
         managed_publication_id = None
+        managed_delete_at = None
         if len(message_ids) == 1:
             managed_delivery = await session.scalar(
                 select(PublishedMessage).where(
@@ -450,6 +451,7 @@ async def relay_source_messages(
             )
             if managed_delivery:
                 managed_publication_id = managed_delivery.publication_id
+                managed_delete_at = managed_delivery.delete_at
         direct_destination_ids = (
             set(
                 await session.scalars(
@@ -483,6 +485,7 @@ async def relay_source_messages(
                         source_message_id=message_id,
                         destination_chat_id=destination_chat_id,
                         succeeded=False,
+                        delete_at=managed_delete_at,
                     )
                     .on_conflict_do_nothing(constraint="uq_relay_delivery_message_destination")
                     .returning(RelayDelivery.id)

@@ -29,9 +29,11 @@ Cada origen admite uno de estos formatos:
 - **Copia limpia:** se publica como mensaje nuevo, no muestra «Reenviado de» y conserva los botones URL públicos cuando Telegram permite copiarlos.
 - **Con atribución:** utiliza el reenvío nativo y muestra el origen cuando Telegram lo permite. Telegram controla el resultado y puede omitir los botones del mensaje original.
 
-La copia limpia es el valor predeterminado para conservar el comportamiento de reglas creadas antes de v0.10.0. Los botones internos de otros bots no se copian. Tampoco se sincronizan mensajes históricos, ediciones ni eliminaciones posteriores.
+La copia limpia es el valor predeterminado para conservar el comportamiento de reglas creadas antes de v0.10.0. Los botones internos de otros bots no se copian. Tampoco se sincronizan mensajes históricos, ediciones ni eliminaciones manuales posteriores.
 
 Si una publicación inmediata, programada o recurrente del propio administrador aparece en un chat configurado como origen, también puede entrar a la regla. El autocompletado y la firma se aplican al publicar desde el editor; no se vuelven a aplicar a una copia de **Reenvío**.
+
+Cuando esa publicación tiene autoeliminación, cada entrega reenviada recibe la misma fecha límite del post principal. El worker elimina las copias en modo limpio o con atribución y reintenta hasta cinco veces si Telegram devuelve un fallo temporal. Esta propagación no se aplica a publicaciones manuales que no tienen un temporizador administrado por el bot.
 
 Los mensajes de servicio, pagos, sorteos y otros tipos restringidos por Telegram se ignoran porque la API no permite copiarlos. Si una entrega normal falla por permisos o por un error de Telegram, queda registrada como fallida sin enviar notificaciones molestas al administrador.
 
@@ -58,4 +60,5 @@ Si además utilizarás autoeliminación, concede **Eliminar mensajes**. Para sol
 5. Prueba primero la copia limpia y después activa «Mostrar Reenviado de».
 6. Confirma que cada contenido aparezca una sola vez y con el formato elegido.
 7. Revisa **Reenvío → origen** y **Estadísticas** para comprobar las entregas.
-8. Intenta configurar el grupo de regreso hacia el canal; el bot debe impedir el ciclo.
+8. Publica desde el bot con autoeliminación y confirma que desaparezcan el original y la copia.
+9. Intenta configurar el grupo de regreso hacia el canal; el bot debe impedir el ciclo.

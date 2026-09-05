@@ -4,11 +4,15 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..database import SessionFactory
-from ..keyboards import channel_post_text_menu
-from ..models import Channel, ChannelStatus
+from ..keyboards import (
+    autocomplete_buttons_menu,
+    channel_post_text_menu,
+    publication_markup,
+)
+from ..models import AutocompleteButton, Channel, ChannelStatus
 from ..repository import get_workspace
 from ..services.post_text import MAX_CHANNEL_TEXT_LENGTH, telegram_text_length
 from ..services.rich_text import (
@@ -73,12 +77,17 @@ def channel_text_menu_text(channel: Channel, kind: str) -> str:
     premium_line = (
         f"\n✨ <b>Emojis premium:</b> {premium_count} detectados" if premium_count else ""
     )
+    buttons_line = (
+        f"\n🔗 <b>Botones automáticos:</b> {len(channel.autocomplete_buttons)}"
+        if kind == "auto"
+        else ""
+    )
     return (
         f"{'🪄' if kind == 'auto' else '✍️'} <b>{title} de {escape(channel.title)}</b>\n\n"
         f"Estado: <b>{'Activo' if enabled else 'Desactivado'}</b>\n\n"
         f"{explanation}\n\n"
         f"<b>Texto actual:</b>\n{current}"
-        f"{premium_line}"
+        f"{premium_line}{buttons_line}"
     )
 
 
@@ -177,6 +186,160 @@ async def reject_non_text_channel_text(message: Message) -> None:
     await message.answer("Esta configuración solo acepta un mensaje de texto.")
 
 
+@router.callback_query(F.data.startswith("posttext:button:"))
+async def ask_autocomplete_button_text(callback: CallbackQuery, state: FSMContext) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.autocomplete_text:
+        await callback.answer("Primero configura el texto de autocompletado.", show_alert=True)
+        return
+    if len(channel.autocomplete_buttons) >= 20:
+        await callback.answer("Puedes configurar hasta 20 botones.", show_alert=True)
+        return
+    await state.set_state(ChannelPostTextFlow.waiting_button_text)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.answer("Escribe el texto del botón (máximo 64 caracteres):")
+    await callback.answer()
+
+
+@router.message(ChannelPostTextFlow.waiting_button_text, F.chat.type == ChatType.PRIVATE, F.text)
+async def receive_autocomplete_button_text(message: Message, state: FSMContext) -> None:
+    text = message.text.strip()
+    if not 1 <= len(text) <= 64:
+        await message.answer("El texto debe tener entre 1 y 64 caracteres.")
+        return
+    await state.update_data(button_text=text)
+    await state.set_state(ChannelPostTextFlow.waiting_button_url)
+    await message.answer("Ahora envía el enlace completo, por ejemplo: https://t.me/mi_canal")
+
+
+@router.message(ChannelPostTextFlow.waiting_button_url, F.chat.type == ChatType.PRIVATE, F.text)
+async def receive_autocomplete_button_url(message: Message, state: FSMContext) -> None:
+    url = message.text.strip()
+    if not url.startswith(("https://", "http://", "tg://")) or len(url) > 2048:
+        await message.answer(
+            "El enlace debe comenzar con https://, http:// o tg:// y no superar 2048 caracteres."
+        )
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
+        if channel is None or not channel.autocomplete_text:
+            await state.clear()
+            await message.answer("La configuración de autocompletado ya no está disponible.")
+            return
+        count = await session.scalar(
+            select(func.count())
+            .select_from(AutocompleteButton)
+            .where(AutocompleteButton.channel_id == channel.telegram_chat_id)
+        )
+        if (count or 0) >= 20:
+            await state.clear()
+            await message.answer(
+                "Esta versión permite hasta 20 botones.",
+                reply_markup=channel_post_text_menu(channel, "auto"),
+            )
+            return
+        channel.autocomplete_buttons.append(
+            AutocompleteButton(
+                row_index=count or 0,
+                position=0,
+                text=data["button_text"],
+                url=url,
+            )
+        )
+        await session.commit()
+    await state.clear()
+    await message.answer(
+        f"✅ Botón automático agregado. Total: <b>{len(channel.autocomplete_buttons)}</b>.",
+        reply_markup=channel_post_text_menu(channel, "auto"),
+    )
+
+
+@router.callback_query(F.data.startswith("posttext:buttons:"))
+async def manage_autocomplete_buttons(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.autocomplete_buttons:
+        await callback.answer("El autocompletado no tiene botones.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"🧹 <b>Botones automáticos de {escape(channel.title)}</b>\n\n"
+        "Pulsa el botón que deseas eliminar. Los demás permanecerán sin cambios.",
+        reply_markup=autocomplete_buttons_menu(
+            channel.telegram_chat_id,
+            channel.autocomplete_buttons,
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("posttext:bdel:"))
+async def delete_autocomplete_button(callback: CallbackQuery) -> None:
+    try:
+        button_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        button = (
+            await session.scalar(
+                select(AutocompleteButton)
+                .join(Channel, Channel.telegram_chat_id == AutocompleteButton.channel_id)
+                .where(
+                    AutocompleteButton.id == button_id,
+                    Channel.workspace_id == workspace.id,
+                    Channel.status == ChannelStatus.active,
+                )
+            )
+            if workspace
+            else None
+        )
+        if button is None:
+            await callback.answer("Botón no encontrado.", show_alert=True)
+            return
+        channel_id = button.channel_id
+        await session.delete(button)
+        await session.flush()
+        remaining = list(
+            await session.scalars(
+                select(AutocompleteButton)
+                .where(AutocompleteButton.channel_id == channel_id)
+                .order_by(AutocompleteButton.row_index, AutocompleteButton.position)
+            )
+        )
+        for row_index, remaining_button in enumerate(remaining):
+            remaining_button.row_index = row_index
+            remaining_button.position = 0
+        await session.commit()
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("El canal ya no está disponible.", show_alert=True)
+        return
+    if channel.autocomplete_buttons:
+        await callback.message.edit_reply_markup(
+            reply_markup=autocomplete_buttons_menu(
+                channel.telegram_chat_id,
+                channel.autocomplete_buttons,
+            )
+        )
+    else:
+        await callback.message.edit_text(
+            f"🪄 <b>{escape(channel.title)}</b>\n\nEl autocompletado quedó sin botones.",
+            reply_markup=channel_post_text_menu(channel, "auto"),
+        )
+    await callback.answer("Botón eliminado")
+
+
 @router.callback_query(F.data.startswith("posttext:preview:"))
 async def preview_channel_text(callback: CallbackQuery) -> None:
     target = callback_target(callback.data)
@@ -203,6 +366,7 @@ async def preview_channel_text(callback: CallbackQuery) -> None:
     await callback.bot.send_message(
         chat_id=callback.from_user.id,
         text=rendered,
+        reply_markup=(publication_markup(channel.autocomplete_buttons) if kind == "auto" else None),
     )
     await callback.answer("Vista previa enviada")
 
@@ -252,6 +416,7 @@ async def clear_channel_text(callback: CallbackQuery) -> None:
             channel.autocomplete_text = None
             channel.autocomplete_text_plain = None
             channel.autocomplete_entities_json = None
+            channel.autocomplete_buttons.clear()
         else:
             channel.signature_enabled = False
             channel.signature_text = None

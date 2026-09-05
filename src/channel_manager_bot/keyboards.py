@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .i18n import LANGUAGES, current_language, current_language_option, tr
 from .models import (
+    AutocompleteButton,
     Channel,
     FarewellButton,
     JoinRequirement,
@@ -543,6 +544,25 @@ def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
             )
         ]
     ]
+    if kind == "auto" and configured:
+        if len(channel.autocomplete_buttons) < 20:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="➕ Agregar botón",
+                        callback_data=f"posttext:button:{channel.telegram_chat_id}",
+                    )
+                ]
+            )
+        if channel.autocomplete_buttons:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="🧹 Administrar botones",
+                        callback_data=f"posttext:buttons:{channel.telegram_chat_id}",
+                    )
+                ]
+            )
     if configured:
         rows.extend(
             [
@@ -571,6 +591,29 @@ def channel_post_text_menu(channel: Channel, kind: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="⬅️ Volver a chats",
                 callback_data=f"feature:channels:{kind}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def autocomplete_buttons_menu(
+    channel_id: int, buttons: list[AutocompleteButton]
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 {button.text}"[:64],
+                callback_data=f"posttext:bdel:{button.id}",
+            )
+        ]
+        for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Volver a autocompletado",
+                callback_data=f"posttext:menu:auto:{channel_id}",
             )
         ]
     )
@@ -838,7 +881,7 @@ def recurrence_start_menu(publication_id: uuid.UUID, days: int) -> InlineKeyboar
 
 
 def publication_markup(
-    buttons: list[PublicationButton] | list[TemplateButton],
+    buttons: list[PublicationButton] | list[TemplateButton] | list[AutocompleteButton],
 ) -> InlineKeyboardMarkup | None:
     if not buttons:
         return None

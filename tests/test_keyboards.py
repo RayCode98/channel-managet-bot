@@ -2,6 +2,7 @@ import uuid
 
 from channel_manager_bot.keyboards import (
     alphabet_filter_menu,
+    autocomplete_buttons_menu,
     channel_detail_menu,
     channel_post_text_menu,
     composer_menu,
@@ -26,6 +27,7 @@ from channel_manager_bot.keyboards import (
     welcome_menu,
 )
 from channel_manager_bot.models import (
+    AutocompleteButton,
     Channel,
     FarewellButton,
     RelayDestination,
@@ -194,6 +196,16 @@ def test_channel_post_text_menu_offers_preview_toggle_and_clear():
         autocomplete_enabled=True,
         autocomplete_text="Texto automático",
     )
+    channel.autocomplete_buttons.append(
+        AutocompleteButton(
+            id=3,
+            channel_id=channel.telegram_chat_id,
+            row_index=0,
+            position=0,
+            text="Visitar",
+            url="https://example.com",
+        )
+    )
 
     callbacks = [
         button.callback_data
@@ -202,9 +214,22 @@ def test_channel_post_text_menu_offers_preview_toggle_and_clear():
     ]
 
     assert "posttext:preview:auto:-1001234567890" in callbacks
+    assert "posttext:button:-1001234567890" in callbacks
+    assert "posttext:buttons:-1001234567890" in callbacks
     assert "posttext:toggle:auto:-1001234567890" in callbacks
     assert "posttext:clear:auto:-1001234567890" in callbacks
     assert all(len(callback.encode()) <= 64 for callback in callbacks)
+
+    manage_callbacks = [
+        button.callback_data
+        for row in autocomplete_buttons_menu(
+            channel.telegram_chat_id,
+            channel.autocomplete_buttons,
+        ).inline_keyboard
+        for button in row
+    ]
+    assert "posttext:bdel:3" in manage_callbacks
+    assert "posttext:menu:auto:-1001234567890" in manage_callbacks
 
 
 def test_publication_and_template_menus_offer_button_management():

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup, Message, MessageEntity
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, MessageEntity
 
 from ..models import Channel, Publication
 from .post_text_length import telegram_text_length as _telegram_text_length
@@ -74,6 +74,51 @@ class PostSourceSnapshot:
 class PostDelivery:
     message_id: int
     custom_emoji_fallback: bool = False
+    reply_markup: InlineKeyboardMarkup | None = None
+
+
+def append_autocomplete_buttons(
+    reply_markup: InlineKeyboardMarkup | None,
+    buttons,
+) -> InlineKeyboardMarkup | None:
+    """Append channel autocomplete URL buttons below publication buttons."""
+    rows = [list(row) for row in reply_markup.inline_keyboard] if reply_markup else []
+    rows.extend(
+        [InlineKeyboardButton(text=button.text, url=button.url)]
+        for button in sorted(buttons or [], key=lambda item: (item.row_index, item.position))
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+def autocomplete_applies_to_source(source, channel: Channel, apply_text_rules: bool = True) -> bool:
+    original = source.source_text_html
+    original_plain = getattr(source, "source_text_plain", None)
+    content_type = source.source_content_type
+    has_original = bool(
+        (original_plain and original_plain.strip()) or (original and original.strip())
+    )
+    text_can_change = content_type == "text" or content_type in CAPTIONABLE_CONTENT_TYPES
+    return bool(
+        apply_text_rules
+        and text_can_change
+        and not has_original
+        and channel.autocomplete_enabled
+        and channel.autocomplete_text
+    )
+
+
+def effective_channel_post_markup(
+    source,
+    channel: Channel,
+    reply_markup: InlineKeyboardMarkup | None,
+    apply_text_rules: bool = True,
+) -> InlineKeyboardMarkup | None:
+    if not autocomplete_applies_to_source(source, channel, apply_text_rules):
+        return reply_markup
+    return append_autocomplete_buttons(
+        reply_markup,
+        getattr(channel, "autocomplete_buttons", []),
+    )
 
 
 def post_source_from_message(message: Message) -> PostSourceSnapshot:
@@ -247,23 +292,24 @@ async def send_post_source_to_chat(
     apply_text_rules: bool = True,
 ) -> PostDelivery:
     """Finalize autocompletion/signature before a publication or clean relay."""
-    original = source.source_text_html
-    original_plain = getattr(source, "source_text_plain", None)
     content_type = source.source_content_type
-
-    has_original = bool(
-        (original_plain and original_plain.strip()) or (original and original.strip())
-    )
     text_can_change = content_type == "text" or content_type in CAPTIONABLE_CONTENT_TYPES
+    autocomplete_applies = autocomplete_applies_to_source(
+        source,
+        text_rules_channel,
+        apply_text_rules,
+    )
+    effective_reply_markup = effective_channel_post_markup(
+        source,
+        text_rules_channel,
+        reply_markup,
+        apply_text_rules,
+    )
     changes_text = bool(
         apply_text_rules
         and text_can_change
         and (
-            (
-                not has_original
-                and text_rules_channel.autocomplete_enabled
-                and text_rules_channel.autocomplete_text
-            )
+            autocomplete_applies
             or (text_rules_channel.signature_enabled and text_rules_channel.signature_text)
         )
     )
@@ -275,9 +321,9 @@ async def send_post_source_to_chat(
             chat_id=destination_chat_id,
             from_chat_id=source.source_chat_id,
             message_id=source.source_message_id,
-            reply_markup=reply_markup,
+            reply_markup=effective_reply_markup,
         )
-        return PostDelivery(message_id=sent.message_id)
+        return PostDelivery(message_id=sent.message_id, reply_markup=effective_reply_markup)
 
     composed = compose_channel_post_rich_text(source, text_rules_channel) if changes_text else None
     premium_count = (
@@ -292,17 +338,17 @@ async def send_post_source_to_chat(
                 chat_id=destination_chat_id,
                 from_chat_id=source.source_chat_id,
                 message_id=source.source_message_id,
-                reply_markup=reply_markup,
+                reply_markup=effective_reply_markup,
             )
         else:
             sent = await deliver_composed_post(
                 bot,
                 source=source,
                 destination_chat_id=destination_chat_id,
-                reply_markup=reply_markup,
+                reply_markup=effective_reply_markup,
                 composed=composed,
             )
-        return PostDelivery(message_id=sent.message_id)
+        return PostDelivery(message_id=sent.message_id, reply_markup=effective_reply_markup)
     except TelegramBadRequest as exc:
         if not premium_count or not is_custom_emoji_restriction(exc):
             raise
@@ -315,7 +361,11 @@ async def send_post_source_to_chat(
         bot,
         source=source,
         destination_chat_id=destination_chat_id,
-        reply_markup=reply_markup,
+        reply_markup=effective_reply_markup,
         composed=without_custom_emoji(fallback_source),
     )
-    return PostDelivery(message_id=sent.message_id, custom_emoji_fallback=True)
+    return PostDelivery(
+        message_id=sent.message_id,
+        custom_emoji_fallback=True,
+        reply_markup=effective_reply_markup,
+    )

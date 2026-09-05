@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import CopyMessage
-from aiogram.types import MessageEntity
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 
 from channel_manager_bot.services.post_text import (
     PostSourceSnapshot,
@@ -21,6 +21,7 @@ def channel(**overrides):
         "autocomplete_text": "Descripción automática",
         "autocomplete_text_plain": None,
         "autocomplete_entities_json": None,
+        "autocomplete_buttons": [],
         "signature_enabled": True,
         "signature_text": "<b>Firma del canal</b>",
         "signature_text_plain": None,
@@ -121,6 +122,59 @@ async def test_media_without_caption_receives_autocomplete_and_signature():
 
     assert bot.method == "copy_message"
     assert bot.arguments["caption"] == "Descripción automática\n\n<b>Firma del canal</b>"
+
+
+async def test_autocomplete_buttons_are_appended_below_publication_buttons():
+    bot = FakeBot()
+    base_markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Botón del post", url="https://example.com/post")]
+        ]
+    )
+    automatic_button = SimpleNamespace(
+        text="Botón automático",
+        url="https://example.com/automatic",
+        row_index=0,
+        position=0,
+    )
+
+    delivery = await send_publication_to_channel(
+        bot,
+        publication("photo", None),
+        channel(autocomplete_buttons=[automatic_button]),
+        reply_markup=base_markup,
+    )
+
+    markup = bot.arguments["reply_markup"]
+    assert [[button.text for button in row] for row in markup.inline_keyboard] == [
+        ["Botón del post"],
+        ["Botón automático"],
+    ]
+    assert delivery.reply_markup == markup
+
+
+async def test_autocomplete_buttons_are_not_added_when_post_has_description():
+    bot = FakeBot()
+    base_markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Botón del post", url="https://example.com/post")]
+        ]
+    )
+    automatic_button = SimpleNamespace(
+        text="No debe aparecer",
+        url="https://example.com/automatic",
+        row_index=0,
+        position=0,
+    )
+
+    await send_publication_to_channel(
+        bot,
+        publication("text", "Descripción original"),
+        channel(autocomplete_buttons=[automatic_button]),
+        reply_markup=base_markup,
+    )
+
+    assert bot.arguments["reply_markup"] == base_markup
 
 
 async def test_custom_emoji_entities_survive_signature_composition():

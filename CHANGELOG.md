@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 0.12.0
+
+- Permite agregar hasta 20 botones URL independientes al autocompletado de cada canal o grupo.
+- Incorpora alta, listado, eliminación individual y vista previa de los botones automáticos desde Telegram.
+- Los botones de autocompletado se agregan debajo de los botones propios de la publicación o plantilla.
+- Aplica esos botones solamente cuando el post no tiene texto o descripción y entra en vigor el autocompletado.
+- Conserva los botones automáticos al reenviar la publicación final en modo de copia limpia.
+- Propaga la fecha de autoeliminación de una publicación administrada a todas sus entregas de reenvío.
+- El worker elimina tanto los posts directos como las copias reenviadas, con el mismo sistema persistente de reintentos.
+- Funciona con publicaciones inmediatas, programadas, recurrentes y creadas desde plantillas, en copia limpia o con atribución.
+- Migración incremental `20260905_0011`, compatible con instalaciones anteriores.
+
 ## 0.11.2
 
 - Corrige el reenvío de publicaciones creadas y enviadas directamente desde el bot.

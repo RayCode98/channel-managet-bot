@@ -114,7 +114,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.11.1, sigue [`UPGRADE_V0.11.2.md`](UPGRADE_V0.11.2.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.11.2, sigue [`UPGRADE_V0.12.0.md`](UPGRADE_V0.12.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Emojis premium
 
@@ -144,10 +144,10 @@ El bot reacciona únicamente cuando Telegram informa que la propia persona aband
 
 Ambas funciones tienen su propio botón en el menú principal. Después se elige el canal y se configura el texto enriquecido de Telegram:
 
-- **Autocompletado:** solamente se utiliza cuando la publicación no tiene texto o descripción. Si ya existe una descripción, no la modifica.
+- **Autocompletado:** solamente se utiliza cuando la publicación no tiene texto o descripción. Si ya existe una descripción, no la modifica. Puede incluir hasta 20 botones URL propios por canal o grupo.
 - **Firma:** siempre se agrega al final. Si existe una descripción, se separa de ella con una línea en blanco.
 
-Cuando están activas las dos funciones y el contenido no tiene descripción, el resultado es `autocompletado + firma`. Cada texto admite hasta 500 unidades de texto de Telegram. La configuración se evalúa al momento de publicar, por lo que cada canal puede producir una versión distinta del mismo contenido.
+Cuando están activas las dos funciones y el contenido no tiene descripción, el resultado es `autocompletado + firma`. Los botones automáticos aparecen debajo de los botones propios del post o plantilla y solamente se agregan cuando entra en vigor el autocompletado. Cada texto admite hasta 500 unidades de texto de Telegram. La configuración se evalúa al momento de publicar, por lo que cada canal puede producir una versión distinta del mismo contenido.
 
 Las publicaciones y plantillas creadas antes de v0.6.0 se copian sin cambios para proteger su formato original. Los elementos anteriores a v0.11.0 continúan usando su copia HTML; vuelve a crearlos si deseas almacenar sus entidades premium de forma explícita.
 
@@ -183,9 +183,11 @@ Dentro de **Destinos** se elige también el formato de esa regla:
 
 Las publicaciones enviadas desde el bot activan el reenvío directamente desde el worker una vez confirmado el post final; no dependen de que Telegram devuelva un evento al mismo bot. Las publicaciones manuales esperan brevemente y aplican primero el autocompletado y la firma configurados en el canal o grupo de origen. Cuando un destino fue elegido directamente en la publicación y además pertenece a la regla de reenvío, se omite la segunda copia para evitar duplicados.
 
+Si una publicación administrada tiene autoeliminación, la misma fecha límite se registra para sus copias de reenvío. El worker elimina tanto el mensaje principal como cada copia, con hasta cinco intentos ante fallos temporales. Esto aplica a copia limpia y con atribución; las publicaciones manuales sin temporizador no se eliminan automáticamente.
+
 Los botones `callback`, inicios de sesión u otras acciones privadas de bots no se reutilizan fuera del bot que los creó.
 
-El sistema registra cada entrega por mensaje y destino para no repetirla. Tampoco permite usar el origen como destino ni formar ciclos directos o indirectos. Las ediciones y eliminaciones posteriores del original no se sincronizan en esta versión. Consulta los detalles y la prueba recomendada en [`GRUPOS_Y_REENVIO.md`](GRUPOS_Y_REENVIO.md).
+El sistema registra cada entrega por mensaje y destino para no repetirla. Tampoco permite usar el origen como destino ni formar ciclos directos o indirectos. Las ediciones y eliminaciones manuales posteriores del original no se sincronizan; solamente se propaga la autoeliminación configurada antes de publicar. Consulta los detalles y la prueba recomendada en [`GRUPOS_Y_REENVIO.md`](GRUPOS_Y_REENVIO.md).
 
 ## Miembros e idiomas
 

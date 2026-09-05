@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from channel_manager_bot.services.relay import (
@@ -66,6 +68,7 @@ async def test_confirmed_worker_post_triggers_relay(monkeypatch):
         fake_relay,
     )
     bot = object()
+    delete_at = datetime(2026, 9, 5, 18, 0, tzinfo=UTC)
 
     await relay_confirmed_publication(
         bot,
@@ -73,6 +76,7 @@ async def test_confirmed_worker_post_triggers_relay(monkeypatch):
         source_chat_id=-1001,
         source_message_id=84,
         reply_markup=None,
+        delete_at=delete_at,
     )
 
     assert received == {
@@ -81,6 +85,7 @@ async def test_confirmed_worker_post_triggers_relay(monkeypatch):
         "source_chat_id": -1001,
         "source_message_id": 84,
         "reply_markup": None,
+        "delete_at": delete_at,
     }
 
 

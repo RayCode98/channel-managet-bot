@@ -1,6 +1,7 @@
 import logging
 import uuid
 from collections import deque
+from datetime import datetime
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -100,10 +101,11 @@ async def relay_managed_publication_message(
     source_chat_id: int,
     source_message_id: int,
     reply_markup: InlineKeyboardMarkup | None,
+    delete_at: datetime | None = None,
 ) -> int:
     """Relay a worker publication even when Telegram emits no channel_post update."""
     # Local imports keep the pure relay helpers usable without application settings.
-    from sqlalchemy import select
+    from sqlalchemy import select, update
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.orm import selectinload
 
@@ -169,12 +171,25 @@ async def relay_managed_publication_message(
                     source_message_id=source_message_id,
                     destination_chat_id=destination_chat_id,
                     succeeded=False,
+                    delete_at=delete_at,
                 )
                 .on_conflict_do_nothing(constraint="uq_relay_delivery_message_destination")
                 .returning(RelayDelivery.id)
             )
             await session.commit()
             if not claimed:
+                if delete_at is not None:
+                    await session.execute(
+                        update(RelayDelivery)
+                        .where(
+                            RelayDelivery.relay_rule_id == rule.id,
+                            RelayDelivery.source_message_id == source_message_id,
+                            RelayDelivery.destination_chat_id == destination_chat_id,
+                            RelayDelivery.delete_at.is_(None),
+                        )
+                        .values(delete_at=delete_at)
+                    )
+                    await session.commit()
                 continue
 
             delivery = await session.get(RelayDelivery, delivery_id)
@@ -218,6 +233,7 @@ async def relay_confirmed_publication(
     source_chat_id: int,
     source_message_id: int | None,
     reply_markup: InlineKeyboardMarkup | None,
+    delete_at: datetime | None = None,
 ) -> None:
     """Run secondary relay delivery without risking the confirmed primary post."""
     if source_message_id is None:
@@ -229,6 +245,7 @@ async def relay_confirmed_publication(
             source_chat_id=source_chat_id,
             source_message_id=source_message_id,
             reply_markup=reply_markup,
+            delete_at=delete_at,
         )
     except Exception:
         # Reenvío es una entrega secundaria y no debe revertir ni repetir una
