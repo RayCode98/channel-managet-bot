@@ -2,6 +2,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from channel_manager_bot.services.relay import (
     is_copyable_content_type,
+    relay_confirmed_publication,
     remember_relayed_message,
     url_only_markup,
     was_recently_relayed,
@@ -51,3 +52,53 @@ def test_recent_relay_output_is_remembered_for_loop_protection():
 
     assert was_recently_relayed(-100999, 42)
     assert not was_recently_relayed(-100999, 43)
+
+
+async def test_confirmed_worker_post_triggers_relay(monkeypatch):
+    received = {}
+
+    async def fake_relay(bot, **kwargs):
+        received["bot"] = bot
+        received.update(kwargs)
+
+    monkeypatch.setattr(
+        "channel_manager_bot.services.relay.relay_managed_publication_message",
+        fake_relay,
+    )
+    bot = object()
+
+    await relay_confirmed_publication(
+        bot,
+        publication_id="publication-1",
+        source_chat_id=-1001,
+        source_message_id=84,
+        reply_markup=None,
+    )
+
+    assert received == {
+        "bot": bot,
+        "publication_id": "publication-1",
+        "source_chat_id": -1001,
+        "source_message_id": 84,
+        "reply_markup": None,
+    }
+
+
+async def test_relay_failure_does_not_fail_confirmed_worker_post(monkeypatch, caplog):
+    async def failing_relay(*args, **kwargs):
+        raise RuntimeError("secondary delivery failed")
+
+    monkeypatch.setattr(
+        "channel_manager_bot.services.relay.relay_managed_publication_message",
+        failing_relay,
+    )
+
+    await relay_confirmed_publication(
+        object(),
+        publication_id="publication-2",
+        source_chat_id=-1002,
+        source_message_id=85,
+        reply_markup=None,
+    )
+
+    assert "Unexpected relay failure" in caplog.text

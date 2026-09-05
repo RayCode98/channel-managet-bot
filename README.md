@@ -114,7 +114,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.11.0, sigue [`UPGRADE_V0.11.1.md`](UPGRADE_V0.11.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.11.1, sigue [`UPGRADE_V0.11.2.md`](UPGRADE_V0.11.2.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Emojis premium
 
@@ -181,7 +181,7 @@ Dentro de **Destinos** se elige también el formato de esa regla:
 - **Copia limpia:** no muestra «Reenviado de» y puede conservar los botones URL públicos.
 - **Con atribución:** utiliza el reenvío nativo de Telegram y muestra el origen cuando Telegram lo permite. En este modo Telegram controla la representación y puede omitir los botones originales.
 
-La copia limpia espera brevemente antes de procesar el mensaje. Si es una publicación creada por el bot, reenvía el resultado ya finalizado por el worker. Si es una publicación manual, aplica primero el autocompletado y la firma configurados en el canal o grupo de origen. Cuando un destino fue elegido directamente en la publicación y además pertenece a la regla de reenvío, se omite la segunda copia para evitar duplicados.
+Las publicaciones enviadas desde el bot activan el reenvío directamente desde el worker una vez confirmado el post final; no dependen de que Telegram devuelva un evento al mismo bot. Las publicaciones manuales esperan brevemente y aplican primero el autocompletado y la firma configurados en el canal o grupo de origen. Cuando un destino fue elegido directamente en la publicación y además pertenece a la regla de reenvío, se omite la segunda copia para evitar duplicados.
 
 Los botones `callback`, inicios de sesión u otras acciones privadas de bots no se reutilizan fuera del bot que los creó.
 

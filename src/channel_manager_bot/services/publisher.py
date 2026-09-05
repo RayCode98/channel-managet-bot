@@ -20,6 +20,7 @@ from ..models import (
 from ..repository import utcnow
 from .post_text import send_publication_to_channel
 from .recurrence import next_recurrence_at
+from .relay import relay_confirmed_publication
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,7 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
         premium_fallbacks = 0
 
         for channel in channels:
+            relay_source_message_id = None
             existing = await session.scalar(
                 select(PublishedMessage).where(
                     PublishedMessage.publication_id == publication.id,
@@ -176,6 +178,13 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
             )
             if existing and existing.succeeded:
                 successes += 1
+                await relay_confirmed_publication(
+                    bot,
+                    publication_id=publication.id,
+                    source_chat_id=channel.telegram_chat_id,
+                    source_message_id=existing.telegram_message_id,
+                    reply_markup=markup,
+                )
                 continue
             try:
                 sent = await send_publication_to_channel(
@@ -199,6 +208,7 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 if existing is None:
                     session.add(result)
                 successes += 1
+                relay_source_message_id = sent.message_id
             except TelegramAPIError as exc:
                 logger.warning(
                     "Could not publish %s to %s: %s", publication.id, channel.telegram_chat_id, exc
@@ -211,6 +221,13 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 if existing is None:
                     session.add(result)
             await session.commit()
+            await relay_confirmed_publication(
+                bot,
+                publication_id=publication.id,
+                source_chat_id=channel.telegram_chat_id,
+                source_message_id=relay_source_message_id,
+                reply_markup=markup,
+            )
 
         if successes == len(channels) and channels:
             publication.status = PublicationStatus.published

@@ -1,6 +1,12 @@
+import logging
+import uuid
 from collections import deque
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+logger = logging.getLogger(__name__)
 
 COPYABLE_CONTENT_TYPES = frozenset(
     {
@@ -85,3 +91,150 @@ def remember_relayed_message(chat_id: int, message_id: int) -> None:
 
 def was_recently_relayed(chat_id: int, message_id: int) -> bool:
     return (chat_id, message_id) in _recent_set
+
+
+async def relay_managed_publication_message(
+    bot: Bot,
+    *,
+    publication_id,
+    source_chat_id: int,
+    source_message_id: int,
+    reply_markup: InlineKeyboardMarkup | None,
+) -> int:
+    """Relay a worker publication even when Telegram emits no channel_post update."""
+    # Local imports keep the pure relay helpers usable without application settings.
+    from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.orm import selectinload
+
+    from ..database import SessionFactory
+    from ..models import (
+        Channel,
+        ChannelStatus,
+        PublicationChannel,
+        RelayDelivery,
+        RelayRule,
+    )
+
+    async with SessionFactory() as session:
+        rule = await session.scalar(
+            select(RelayRule)
+            .join(Channel, Channel.telegram_chat_id == RelayRule.source_chat_id)
+            .options(selectinload(RelayRule.destinations))
+            .where(
+                RelayRule.source_chat_id == source_chat_id,
+                RelayRule.enabled.is_(True),
+                Channel.status == ChannelStatus.active,
+            )
+        )
+        if rule is None or not rule.destinations:
+            return 0
+
+        destination_ids = [item.destination_chat_id for item in rule.destinations]
+        direct_destination_ids = set(
+            await session.scalars(
+                select(PublicationChannel.channel_id).where(
+                    PublicationChannel.publication_id == publication_id,
+                    PublicationChannel.channel_id.in_(destination_ids),
+                )
+            )
+        )
+        destinations = list(
+            await session.scalars(
+                select(Channel).where(
+                    Channel.telegram_chat_id.in_(destination_ids),
+                    Channel.status == ChannelStatus.active,
+                    Channel.can_post_messages.is_(True),
+                )
+            )
+        )
+
+        successes = 0
+        for destination in destinations:
+            destination_chat_id = destination.telegram_chat_id
+            if destination_chat_id in direct_destination_ids:
+                logger.info(
+                    "Skipping worker relay duplicate for publication %s to %s",
+                    publication_id,
+                    destination_chat_id,
+                )
+                continue
+
+            delivery_id = uuid.uuid4()
+            claimed = await session.scalar(
+                pg_insert(RelayDelivery)
+                .values(
+                    id=delivery_id,
+                    relay_rule_id=rule.id,
+                    source_message_id=source_message_id,
+                    destination_chat_id=destination_chat_id,
+                    succeeded=False,
+                )
+                .on_conflict_do_nothing(constraint="uq_relay_delivery_message_destination")
+                .returning(RelayDelivery.id)
+            )
+            await session.commit()
+            if not claimed:
+                continue
+
+            delivery = await session.get(RelayDelivery, delivery_id)
+            try:
+                if rule.preserve_forward_header:
+                    sent = await bot.forward_message(
+                        chat_id=destination_chat_id,
+                        from_chat_id=source_chat_id,
+                        message_id=source_message_id,
+                    )
+                else:
+                    sent = await bot.copy_message(
+                        chat_id=destination_chat_id,
+                        from_chat_id=source_chat_id,
+                        message_id=source_message_id,
+                        reply_markup=url_only_markup(reply_markup),
+                    )
+                delivery.telegram_message_id = sent.message_id
+                delivery.succeeded = True
+                delivery.error = None
+                remember_relayed_message(destination_chat_id, sent.message_id)
+                successes += 1
+            except TelegramAPIError as exc:
+                logger.warning(
+                    "Could not relay worker publication %s from %s to %s: %s",
+                    publication_id,
+                    source_chat_id,
+                    destination_chat_id,
+                    exc,
+                )
+                delivery.succeeded = False
+                delivery.error = str(exc)[:2000]
+            await session.commit()
+        return successes
+
+
+async def relay_confirmed_publication(
+    bot: Bot,
+    *,
+    publication_id,
+    source_chat_id: int,
+    source_message_id: int | None,
+    reply_markup: InlineKeyboardMarkup | None,
+) -> None:
+    """Run secondary relay delivery without risking the confirmed primary post."""
+    if source_message_id is None:
+        return
+    try:
+        await relay_managed_publication_message(
+            bot,
+            publication_id=publication_id,
+            source_chat_id=source_chat_id,
+            source_message_id=source_message_id,
+            reply_markup=reply_markup,
+        )
+    except Exception:
+        # Reenvío es una entrega secundaria y no debe revertir ni repetir una
+        # publicación principal que Telegram ya confirmó.
+        logger.exception(
+            "Unexpected relay failure for publication %s from %s",
+            publication_id,
+            source_chat_id,
+        )

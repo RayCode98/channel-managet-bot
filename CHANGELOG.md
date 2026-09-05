@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 0.11.2
+
+- Corrige el reenvío de publicaciones creadas y enviadas directamente desde el bot.
+- El worker activa la regla de reenvío inmediatamente después de confirmar el post final en el canal o grupo de origen, sin depender de que Telegram emita un evento `channel_post` al mismo bot.
+- El reenvío ocurre después de aplicar autocompletado y firma, por lo que la copia limpia recibe el contenido final.
+- Respeta tanto la copia limpia como el modo nativo con la etiqueta «Reenviado de» y conserva los botones URL configurados cuando corresponde.
+- Reutiliza el reclamo transaccional de cada entrega para impedir duplicados si Telegram también entrega el evento del post.
+- Omite un destino de la regla cuando ese mismo chat ya fue seleccionado directamente en la publicación.
+- Completa reenvíos pendientes al recuperar una publicación principal previamente confirmada tras un reinicio.
+- No requiere una migración adicional; el esquema permanece en `20260904_0010`.
+
 ## 0.11.1
 
 - Corrige la pérdida completa de una publicación cuando Telegram rechaza entidades `custom_emoji`.
