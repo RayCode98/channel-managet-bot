@@ -165,6 +165,7 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
         )
         markup = publication_markup(publication.buttons)
         successes = 0
+        premium_fallbacks = 0
 
         for channel in channels:
             existing = await session.scalar(
@@ -189,6 +190,8 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
                 result.telegram_message_id = sent.message_id
                 result.succeeded = True
                 result.error = None
+                if sent.custom_emoji_fallback:
+                    premium_fallbacks += 1
                 if publication.delete_after_minutes:
                     result.delete_at = utcnow() + timedelta(
                         minutes=publication.delete_after_minutes
@@ -221,10 +224,17 @@ async def publish_claimed(bot: Bot, publication_id) -> None:
 
         try:
             next_text = "\n🔁 La siguiente repetición quedó programada." if next_publication else ""
+            premium_text = (
+                "\n⚠️ Telegram rechazó los emojis premium en "
+                f"<b>{premium_fallbacks}</b> destino(s). La publicación se entregó con su "
+                "emoji normal de respaldo."
+                if premium_fallbacks
+                else ""
+            )
             await bot.send_message(
                 publication.creator_user_id,
                 f"📬 Publicación terminada: <b>{successes}/{len(channels)}</b> entregas exitosas."
-                f"{next_text}",
+                f"{next_text}{premium_text}",
             )
         except TelegramAPIError as exc:
             logger.info("Could not notify publication creator: %s", exc)

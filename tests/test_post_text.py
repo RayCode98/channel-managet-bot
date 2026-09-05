@@ -1,9 +1,13 @@
 from types import SimpleNamespace
 
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import CopyMessage
 from aiogram.types import MessageEntity
 
 from channel_manager_bot.services.post_text import (
+    PostSourceSnapshot,
     compose_channel_post_text,
+    send_post_source_to_chat,
     send_publication_to_channel,
     telegram_text_length,
 )
@@ -74,6 +78,21 @@ class FakeBot:
         self.method = "copy_message"
         self.arguments = kwargs
         return SimpleNamespace(message_id=11)
+
+
+class PremiumRejectingBot(FakeBot):
+    def __init__(self):
+        super().__init__()
+        self.copy_attempts = 0
+
+    async def copy_message(self, **kwargs):
+        self.copy_attempts += 1
+        if self.copy_attempts == 1:
+            raise TelegramBadRequest(
+                method=CopyMessage(**kwargs),
+                message="can't use custom emoji entities",
+            )
+        return await super().copy_message(**kwargs)
 
 
 async def test_text_post_is_rebuilt_when_signature_is_added():
@@ -174,6 +193,73 @@ async def test_unchanged_custom_emoji_post_uses_native_copy():
 
     assert bot.method == "copy_message"
     assert "caption" not in bot.arguments
+
+
+async def test_rejected_premium_emoji_retries_with_visible_unicode_fallback():
+    bot = PremiumRejectingBot()
+    configured_channel = channel(signature_enabled=False, signature_text=None)
+
+    delivery = await send_publication_to_channel(
+        bot,
+        publication(
+            "text",
+            '<tg-emoji emoji-id="premium-id">😀</tg-emoji> Oferta',
+            source_text_plain="😀 Oferta",
+            source_entities_json=serialize_entities(
+                [
+                    MessageEntity(
+                        type="custom_emoji",
+                        offset=0,
+                        length=2,
+                        custom_emoji_id="premium-id",
+                    )
+                ]
+            ),
+        ),
+        configured_channel,
+        reply_markup=None,
+    )
+
+    assert delivery.custom_emoji_fallback is True
+    assert bot.copy_attempts == 1
+    assert bot.method == "send_message"
+    assert bot.arguments["text"] == "😀 Oferta"
+    assert bot.arguments["entities"] == []
+
+
+async def test_clean_relay_finalizes_source_autocomplete_and_signature_before_delivery():
+    bot = FakeBot()
+    source_rules = channel(
+        autocomplete_text="Descripción automática",
+        autocomplete_text_plain="Descripción automática",
+        autocomplete_entities_json="[]",
+        signature_text="Firma",
+        signature_text_plain="Firma",
+        signature_entities_json="[]",
+    )
+    source = PostSourceSnapshot(
+        source_chat_id=-1001,
+        source_message_id=50,
+        source_content_type="photo",
+        source_text_html=None,
+        source_text_plain=None,
+        source_entities_json="[]",
+    )
+
+    delivery = await send_post_source_to_chat(
+        bot,
+        source=source,
+        destination_chat_id=-1002,
+        text_rules_channel=source_rules,
+        reply_markup=None,
+    )
+
+    assert delivery.custom_emoji_fallback is False
+    assert bot.method == "copy_message"
+    assert bot.arguments["chat_id"] == -1002
+    assert bot.arguments["from_chat_id"] == -1001
+    assert bot.arguments["caption"] == "Descripción automática\n\nFirma"
+    assert bot.arguments["caption_entities"] == []
 
 
 async def test_legacy_publication_is_copied_without_channel_text_changes():

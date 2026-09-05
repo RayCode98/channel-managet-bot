@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 0.11.1
+
+- Corrige la pérdida completa de una publicación cuando Telegram rechaza entidades `custom_emoji`.
+- Intenta primero la publicación premium y, ante el rechazo específico de Telegram, reenvía el contenido con el emoji Unicode visible de respaldo.
+- Notifica al creador cuántos destinos utilizaron el respaldo, sin marcar esas entregas como fallidas.
+- Agrega una espera corta al reenvío para permitir que el worker registre y finalice publicaciones administradas.
+- En copia limpia, los mensajes manuales aplican autocompletado y firma del canal de origen antes de enviarse a los destinos.
+- Evita reenvíos duplicados cuando una publicación administrada seleccionó directamente un destino que también pertenece a la regla de reenvío.
+- Las publicaciones ya procesadas por el worker se copian como resultado final y no reciben la firma por segunda vez.
+- El modo con atribución continúa siendo un reenvío nativo; Telegram controla su texto y formato.
+- No requiere una migración adicional; el esquema permanece en `20260904_0010`.
+
 ## 0.11.0
 
 - Detecta emojis premium (`custom_emoji`) cuando el usuario crea una publicación o plantilla.

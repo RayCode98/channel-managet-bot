@@ -87,7 +87,8 @@ async def new_publication(callback: CallbackQuery, state: FSMContext) -> None:
         "📝 <b>Nueva publicación</b>\n\n"
         "Envíame el contenido exactamente como debe aparecer: texto con formato, foto, video, "
         "animación, audio o documento. Puedes insertar emojis premium directamente desde el "
-        "selector de Telegram; el bot conservará sus entidades.\n\n"
+        "selector de Telegram; el bot conservará sus entidades cuando Telegram lo autorice. "
+        "Si la API los rechaza, se utilizará el emoji normal visible sin perder el post.\n\n"
         "Envía /cancel para salir.",
         reply_markup=back_home(),
     )

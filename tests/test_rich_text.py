@@ -8,6 +8,8 @@ from channel_manager_bot.services.rich_text import (
     message_text_and_entities,
     serialize_entities,
     stored_custom_emoji_count,
+    without_custom_emoji_entities,
+    without_custom_emoji_html,
 )
 
 
@@ -81,4 +83,15 @@ def test_stored_count_falls_back_to_legacy_html():
             '<tg-emoji emoji-id="one">😀</tg-emoji> <tg-emoji emoji-id="two">⭐</tg-emoji>',
         )
         == 2
+    )
+
+
+def test_custom_emoji_fallback_keeps_visible_emoji_and_other_entities():
+    custom = custom_emoji("premium")
+    bold = MessageEntity(type="bold", offset=3, length=6)
+
+    assert without_custom_emoji_entities([custom, bold]) == [bold]
+    assert (
+        without_custom_emoji_html('<tg-emoji emoji-id="premium">😀</tg-emoji> <b>Oferta</b>')
+        == "😀 <b>Oferta</b>"
     )

@@ -120,7 +120,8 @@ async def receive_template_name(message: Message, state: FSMContext) -> None:
     await state.set_state(TemplateFlow.waiting_content)
     await message.answer(
         "Ahora envía el contenido de la plantilla: texto enriquecido, foto, video, animación, "
-        "audio o documento. Puedes insertar emojis premium desde el selector de Telegram."
+        "audio o documento. Puedes insertar emojis premium desde el selector de Telegram; "
+        "si la API no los autoriza en un destino, se usará su emoji normal de respaldo."
     )
 
 

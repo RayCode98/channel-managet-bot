@@ -17,11 +17,14 @@ from ..models import (
     AuditLog,
     Channel,
     ChannelStatus,
+    PublicationChannel,
+    PublishedMessage,
     RelayDelivery,
     RelayDestination,
     RelayRule,
 )
 from ..repository import get_active_channels, get_workspace
+from ..services.post_text import post_source_from_message, send_post_source_to_chat
 from ..services.relay import (
     is_copyable_content_type,
     remember_relayed_message,
@@ -35,8 +38,9 @@ router = Router(name="relays")
 logger = logging.getLogger(__name__)
 
 _album_lock = asyncio.Lock()
-_album_messages: dict[tuple[int, str], set[int]] = {}
+_album_messages: dict[tuple[int, str], dict[int, Message]] = {}
 _album_markups: dict[tuple[int, str], InlineKeyboardMarkup] = {}
+_RELAY_SETTLE_SECONDS = 1.0
 
 
 async def load_rule(session, source_chat_id: int, workspace_id=None) -> RelayRule | None:
@@ -77,8 +81,9 @@ def rule_text(
         f"Formato: <b>{mode}</b>\n"
         f"Entregas: <b>{successful} correctas</b> · <b>{failed} fallidas</b>\n\n"
         f"<b>Destinos:</b>\n{destination_lines}\n\n"
-        "La copia limpia conserva botones URL. Al mostrar el origen, Telegram controla el "
-        "formato y puede omitir los botones del mensaje original."
+        "La copia limpia espera el procesamiento del mensaje y aplica primero el "
+        "autocompletado y la firma configurados en el origen. Al mostrar el origen, "
+        "Telegram controla el formato y puede omitir botones o ajustes de texto."
     )
 
 
@@ -179,7 +184,8 @@ async def show_relay_targets(callback: CallbackQuery) -> None:
         return
     text = (
         f"🎯 <b>Destinos de {escape(source.title)}</b>\n\n"
-        "Selecciona uno o varios canales o grupos. El origen no puede ser su propio destino."
+        "Selecciona uno o varios canales o grupos. El origen no puede ser su propio destino. "
+        "En copia limpia, primero se finaliza el autocompletado y la firma del origen."
     )
     if len(channels) < 2:
         text += "\n\nVincula al menos otro canal o grupo para continuar."
@@ -402,6 +408,7 @@ async def relay_source_messages(
     source_chat_id: int,
     message_ids: list[int],
     reply_markup: InlineKeyboardMarkup | None = None,
+    source_messages: dict[int, Message] | None = None,
 ) -> None:
     async with SessionFactory() as session:
         rule = await session.scalar(
@@ -416,10 +423,13 @@ async def relay_source_messages(
         )
         if rule is None or not rule.destinations:
             return
+        source_channel = await session.get(Channel, source_chat_id)
+        if source_channel is None:
+            return
         destination_ids = [item.destination_chat_id for item in rule.destinations]
-        active_ids = set(
+        active_destinations = list(
             await session.scalars(
-                select(Channel.telegram_chat_id).where(
+                select(Channel).where(
                     Channel.telegram_chat_id.in_(destination_ids),
                     Channel.status == ChannelStatus.active,
                     Channel.can_post_messages.is_(True),
@@ -427,7 +437,41 @@ async def relay_source_messages(
             )
         )
 
-        for destination_chat_id in active_ids:
+        # A publication managed by the worker may also include one of the relay
+        # destinations explicitly. Do not race the worker or create a duplicate copy.
+        managed_publication_id = None
+        if len(message_ids) == 1:
+            managed_delivery = await session.scalar(
+                select(PublishedMessage).where(
+                    PublishedMessage.channel_id == source_chat_id,
+                    PublishedMessage.telegram_message_id == message_ids[0],
+                    PublishedMessage.succeeded.is_(True),
+                )
+            )
+            if managed_delivery:
+                managed_publication_id = managed_delivery.publication_id
+        direct_destination_ids = (
+            set(
+                await session.scalars(
+                    select(PublicationChannel.channel_id).where(
+                        PublicationChannel.publication_id == managed_publication_id,
+                        PublicationChannel.channel_id.in_(destination_ids),
+                    )
+                )
+            )
+            if managed_publication_id
+            else set()
+        )
+
+        for destination in active_destinations:
+            destination_chat_id = destination.telegram_chat_id
+            if destination_chat_id in direct_destination_ids:
+                logger.info(
+                    "Skipping relay duplicate for publication %s to %s",
+                    managed_publication_id,
+                    destination_chat_id,
+                )
+                continue
             claimed: dict[int, uuid.UUID] = {}
             for message_id in message_ids:
                 delivery_id = uuid.uuid4()
@@ -458,6 +502,7 @@ async def relay_source_messages(
                 )
             )
             by_source = {item.source_message_id: item for item in deliveries}
+            premium_fallback = False
 
             try:
                 if rule.preserve_forward_header and len(pending_ids) == 1:
@@ -475,13 +520,26 @@ async def relay_source_messages(
                     )
                     sent_ids = [item.message_id for item in sent]
                 elif len(pending_ids) == 1:
-                    sent = await bot.copy_message(
-                        chat_id=destination_chat_id,
-                        from_chat_id=source_chat_id,
-                        message_id=pending_ids[0],
-                        reply_markup=url_only_markup(reply_markup),
-                    )
-                    sent_ids = [sent.message_id]
+                    source_message = (source_messages or {}).get(pending_ids[0])
+                    if source_message is None or managed_publication_id:
+                        sent = await bot.copy_message(
+                            chat_id=destination_chat_id,
+                            from_chat_id=source_chat_id,
+                            message_id=pending_ids[0],
+                            reply_markup=url_only_markup(reply_markup),
+                        )
+                        sent_ids = [sent.message_id]
+                        premium_fallback = False
+                    else:
+                        delivery = await send_post_source_to_chat(
+                            bot,
+                            source=post_source_from_message(source_message),
+                            destination_chat_id=destination_chat_id,
+                            text_rules_channel=source_channel,
+                            reply_markup=url_only_markup(reply_markup),
+                        )
+                        sent_ids = [delivery.message_id]
+                        premium_fallback = delivery.custom_emoji_fallback
                 else:
                     sent = await bot.copy_messages(
                         chat_id=destination_chat_id,
@@ -521,7 +579,11 @@ async def relay_source_messages(
                 if position < len(sent_ids):
                     delivery.telegram_message_id = sent_ids[position]
                     delivery.succeeded = True
-                    delivery.error = None
+                    delivery.error = (
+                        "Telegram rechazó el emoji premium; se utilizó su emoji normal."
+                        if len(pending_ids) == 1 and premium_fallback
+                        else None
+                    )
                     remember_relayed_message(destination_chat_id, sent_ids[position])
                 else:
                     delivery.succeeded = False
@@ -535,25 +597,28 @@ async def process_relay_message(message: Message, bot: Bot) -> None:
     if await is_relay_output(message.chat.id, message.message_id):
         return
     if not message.media_group_id:
+        await asyncio.sleep(_RELAY_SETTLE_SECONDS)
         await relay_source_messages(
             bot,
             source_chat_id=message.chat.id,
             message_ids=[message.message_id],
             reply_markup=message.reply_markup,
+            source_messages={message.message_id: message},
         )
         return
 
     key = (message.chat.id, message.media_group_id)
     async with _album_lock:
         is_first = key not in _album_messages
-        _album_messages.setdefault(key, set()).add(message.message_id)
+        _album_messages.setdefault(key, {})[message.message_id] = message
         if message.reply_markup is not None:
             _album_markups[key] = message.reply_markup
     if not is_first:
         return
     await asyncio.sleep(1)
     async with _album_lock:
-        message_ids = sorted(_album_messages.pop(key, set()))
+        source_messages = _album_messages.pop(key, {})
+        message_ids = sorted(source_messages)
         reply_markup = _album_markups.pop(key, None)
     if message_ids:
         await relay_source_messages(
@@ -561,6 +626,7 @@ async def process_relay_message(message: Message, bot: Bot) -> None:
             source_chat_id=message.chat.id,
             message_ids=message_ids,
             reply_markup=reply_markup,
+            source_messages=source_messages,
         )
 
 
