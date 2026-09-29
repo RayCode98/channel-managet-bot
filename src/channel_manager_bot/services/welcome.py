@@ -73,6 +73,14 @@ def parse_welcome_buttons(value: str) -> list[ParsedWelcomeButton]:
     return parsed
 
 
+def parse_single_welcome_button(value: str) -> ParsedWelcomeButton:
+    """Parse one button for the append-only button administration flow."""
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise ValueError("Envía un solo botón en una línea: nombre - url - color")
+    return parse_welcome_buttons(lines[0])[0]
+
+
 def render_welcome_text(template: str | None, user_name: str, channel_name: str) -> str:
     text = template or ""
     return text.replace("{nombre}", escape(user_name)).replace("{canal}", escape(channel_name))

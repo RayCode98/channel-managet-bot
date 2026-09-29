@@ -13,8 +13,10 @@ from ..keyboards import farewell_buttons_menu, farewell_menu
 from ..models import Channel, ChannelStatus, FarewellButton
 from ..repository import get_workspace
 from ..services.welcome import (
+    MAX_WELCOME_BUTTONS,
     content_from_message,
     is_voluntary_channel_departure,
+    parse_single_welcome_button,
     parse_welcome_buttons,
     send_channel_farewell,
 )
@@ -175,6 +177,78 @@ async def save_farewell_buttons(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Botones de despedida actualizados: <b>{len(parsed_buttons)}</b>.",
         reply_markup=farewell_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("farewell:add:"))
+async def ask_extra_farewell_button(callback: CallbackQuery, state: FSMContext) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.farewell_source_message_id:
+        await callback.answer("Primero configura el contenido de despedida.", show_alert=True)
+        return
+    if len(channel.farewell_buttons) >= MAX_WELCOME_BUTTONS:
+        await callback.answer(
+            f"Puedes configurar hasta {MAX_WELCOME_BUTTONS} botones.",
+            show_alert=True,
+        )
+        return
+    await state.set_state(ChannelFarewellFlow.waiting_extra_button)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.answer(
+        "➕ Envía el botón nuevo en una sola línea con este formato:\n\n"
+        "<code>nombre botón - url - color</code>\n\n"
+        "Ejemplo: <code>Volver al canal - https://t.me/mi_canal - verde</code>\n"
+        "Colores disponibles: <b>azul, verde, rojo o normal</b>.\n"
+        "Los botones existentes se conservarán sin cambios.",
+    )
+    await callback.answer()
+
+
+@router.message(ChannelFarewellFlow.waiting_extra_button, F.text)
+async def receive_extra_farewell_button(message: Message, state: FSMContext) -> None:
+    try:
+        parsed_button = parse_single_welcome_button(message.text)
+    except ValueError as exc:
+        await message.answer(f"⚠️ {escape(str(exc))}")
+        return
+
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
+        if channel is None:
+            await state.clear()
+            await message.answer("Canal no encontrado.")
+            return
+        if not channel.farewell_source_message_id:
+            await state.clear()
+            await message.answer("Primero configura el contenido de despedida.")
+            return
+        if len(channel.farewell_buttons) >= MAX_WELCOME_BUTTONS:
+            await state.clear()
+            await message.answer(
+                f"Ya tienes el máximo de {MAX_WELCOME_BUTTONS} botones configurados."
+            )
+            return
+        channel.farewell_buttons.append(
+            FarewellButton(
+                row_index=len(channel.farewell_buttons),
+                position=0,
+                text=parsed_button.text,
+                url=parsed_button.url,
+                style=parsed_button.style,
+            )
+        )
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        f"✅ Botón agregado. La despedida ahora tiene <b>{len(channel.farewell_buttons)}</b> botones.",
+        reply_markup=farewell_buttons_menu(channel.telegram_chat_id, channel.farewell_buttons),
     )
 
 

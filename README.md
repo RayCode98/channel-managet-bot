@@ -37,7 +37,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Plan de contenido paginado y agrupado por fecha.
 - Plantillas reutilizables con contenido, botones y autoeliminación.
 - Vista previa exacta de plantillas antes de utilizarlas.
-- Eliminación individual de botones en bienvenidas, plantillas y publicaciones en preparación.
+- Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
+- Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
 - Publicaciones recurrentes cada 1 a 365 días, con inicio inmediato o programado.
 - Recurrencia disponible al crear desde cero o al utilizar una plantilla.
 - Autoeliminación de publicaciones entre 1 hora y 7 días.
@@ -114,7 +115,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.11.2, sigue [`UPGRADE_V0.12.0.md`](UPGRADE_V0.12.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.12.0, sigue [`UPGRADE_V0.12.1.md`](UPGRADE_V0.12.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 ## Emojis premium
 
@@ -132,11 +133,11 @@ En una recurrencia solamente se conserva la siguiente ejecución futura. Cuando 
 
 La bienvenida privada se intenta enviar usando el identificador temporal incluido en una solicitud de ingreso y antes de aprobarla. Funciona en canales y grupos que usen solicitudes. No es posible escribir arbitrariamente a quienes entran directamente ni a usuarios que nunca han abierto el bot.
 
-Al configurar el contenido puedes usar `{nombre}` para el nombre del solicitante y `{canal}` para el nombre del canal o grupo. Se conserva `{canal}` para que las plantillas existentes sigan funcionando. Los botones se envían en un solo mensaje, uno por línea, con `nombre - url - color`. Los colores admitidos son `azul`, `verde`, `rojo` y `normal`.
+Al configurar el contenido puedes usar `{nombre}` para el nombre del solicitante y `{canal}` para el nombre del canal o grupo. Se conserva `{canal}` para que las plantillas existentes sigan funcionando. Los botones se envían en un solo mensaje, uno por línea, con `nombre - url - color`. Los colores admitidos son `azul`, `verde`, `rojo` y `normal`. En **Administrar botones** puedes usar **Agregar botón** para anexar una línea nueva sin modificar los botones que ya existen.
 
 ## Despedidas y limitación de Telegram
 
-Cada canal o grupo tiene su propia despedida en **Despedidas → elegir chat**. Admite el mismo contenido, variables, botones y colores que una bienvenida, además de vista previa, activación y eliminación individual de botones.
+Cada canal o grupo tiene su propia despedida en **Despedidas → elegir chat**. Admite el mismo contenido, variables, botones y colores que una bienvenida, además de vista previa, activación, eliminación individual y anexado de botones.
 
 El bot reacciona únicamente cuando Telegram informa que la propia persona abandonó voluntariamente el canal. No envía despedidas por expulsiones. El mensaje privado es de mejor esfuerzo: solo llegará si esa persona ya abrió el bot y todavía permite que le escriba. Los fallos se registran silenciosamente y nunca generan una notificación al administrador.
 

@@ -629,6 +629,15 @@ def welcome_buttons_menu(channel_id: int, buttons: list[WelcomeButton]) -> Inlin
         ]
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
+    if len(buttons) < 20:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="➕ Agregar botón",
+                    callback_data=f"welcome:add:{channel_id}",
+                )
+            ]
+        )
     rows.append(
         [
             InlineKeyboardButton(
@@ -710,6 +719,15 @@ def farewell_buttons_menu(channel_id: int, buttons: list[FarewellButton]) -> Inl
         ]
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
+    if len(buttons) < 20:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="➕ Agregar botón",
+                    callback_data=f"farewell:add:{channel_id}",
+                )
+            ]
+        )
     rows.append(
         [
             InlineKeyboardButton(

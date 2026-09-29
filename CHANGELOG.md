@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 0.12.1
+
+- Agrega **➕ Agregar botón** dentro de la administración individual de botones de bienvenidas.
+- Agrega la misma opción independiente para las despedidas.
+- Anexa un botón nuevo sin borrar ni volver a capturar los botones existentes, conservando su orden, color y URL.
+- Mantiene el límite de 20 botones y valida el mismo formato `nombre - url - color`.
+- No requiere una migración adicional; el esquema permanece en `20260905_0011`.
+
 ## 0.12.0
 
 - Permite agregar hasta 20 botones URL independientes al autocompletado de cada canal o grupo.

@@ -27,7 +27,9 @@ from ..repository import (
 )
 from ..services.channel_sync import normalize_chat_type, refresh_channels
 from ..services.welcome import (
+    MAX_WELCOME_BUTTONS,
     content_from_message,
+    parse_single_welcome_button,
     parse_welcome_buttons,
     send_channel_welcome,
 )
@@ -317,6 +319,78 @@ async def receive_welcome_buttons(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Botones actualizados: <b>{len(parsed_buttons)}</b>.",
         reply_markup=welcome_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("welcome:add:"))
+async def ask_extra_welcome_button(callback: CallbackQuery, state: FSMContext) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal no encontrado.", show_alert=True)
+        return
+    if not channel.welcome_source_message_id:
+        await callback.answer("Primero configura el contenido de bienvenida.", show_alert=True)
+        return
+    if len(channel.welcome_buttons) >= MAX_WELCOME_BUTTONS:
+        await callback.answer(
+            f"Puedes configurar hasta {MAX_WELCOME_BUTTONS} botones.",
+            show_alert=True,
+        )
+        return
+    await state.set_state(ChannelWelcomeFlow.waiting_extra_button)
+    await state.update_data(channel_id=channel_id)
+    await callback.message.answer(
+        "➕ Envía el botón nuevo en una sola línea con este formato:\n\n"
+        "<code>nombre botón - url - color</code>\n\n"
+        "Ejemplo: <code>Ver catálogo - https://example.com/catalogo - azul</code>\n"
+        "Colores disponibles: <b>azul, verde, rojo o normal</b>.\n"
+        "Los botones existentes se conservarán sin cambios.",
+    )
+    await callback.answer()
+
+
+@router.message(ChannelWelcomeFlow.waiting_extra_button, F.text)
+async def receive_extra_welcome_button(message: Message, state: FSMContext) -> None:
+    try:
+        parsed_button = parse_single_welcome_button(message.text)
+    except ValueError as exc:
+        await message.answer(f"⚠️ {escape(str(exc))}")
+        return
+
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
+        if channel is None:
+            await state.clear()
+            await message.answer("Canal no encontrado.")
+            return
+        if not channel.welcome_source_message_id:
+            await state.clear()
+            await message.answer("Primero configura el contenido de bienvenida.")
+            return
+        if len(channel.welcome_buttons) >= MAX_WELCOME_BUTTONS:
+            await state.clear()
+            await message.answer(
+                f"Ya tienes el máximo de {MAX_WELCOME_BUTTONS} botones configurados."
+            )
+            return
+        channel.welcome_buttons.append(
+            WelcomeButton(
+                row_index=len(channel.welcome_buttons),
+                position=0,
+                text=parsed_button.text,
+                url=parsed_button.url,
+                style=parsed_button.style,
+            )
+        )
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        f"✅ Botón agregado. La bienvenida ahora tiene <b>{len(channel.welcome_buttons)}</b> botones.",
+        reply_markup=welcome_buttons_menu(channel.telegram_chat_id, channel.welcome_buttons),
     )
 
 

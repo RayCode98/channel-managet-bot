@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from channel_manager_bot.services.welcome import (
+    parse_single_welcome_button,
     parse_welcome_buttons,
     render_welcome_text,
     send_channel_farewell,
@@ -26,6 +27,19 @@ def test_multiline_buttons_accept_colors_and_hyphens_in_url():
 def test_multiline_buttons_report_invalid_line():
     with pytest.raises(ValueError, match="línea 2"):
         parse_welcome_buttons("Correcto - https://example.com - verde\nFalta formato")
+
+
+def test_single_button_parser_preserves_existing_format_and_rejects_multiple_lines():
+    button = parse_single_welcome_button("Catálogo - https://example.com/catalogo - azul")
+
+    assert button.text == "Catálogo"
+    assert button.url == "https://example.com/catalogo"
+    assert button.style == "primary"
+
+    with pytest.raises(ValueError, match="un solo botón"):
+        parse_single_welcome_button(
+            "Uno - https://example.com/1 - verde\nDos - https://example.com/2 - rojo"
+        )
 
 
 def test_welcome_placeholders_are_replaced_and_escaped():

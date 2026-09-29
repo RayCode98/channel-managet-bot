@@ -14,11 +14,13 @@ class PublicationFlow(StatesGroup):
 class ChannelWelcomeFlow(StatesGroup):
     waiting_content = State()
     waiting_buttons = State()
+    waiting_extra_button = State()
 
 
 class ChannelFarewellFlow(StatesGroup):
     waiting_content = State()
     waiting_buttons = State()
+    waiting_extra_button = State()
 
 
 class ChannelPostTextFlow(StatesGroup):

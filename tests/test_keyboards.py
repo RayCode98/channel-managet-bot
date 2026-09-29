@@ -6,6 +6,7 @@ from channel_manager_bot.keyboards import (
     channel_detail_menu,
     channel_post_text_menu,
     composer_menu,
+    farewell_buttons_menu,
     farewell_menu,
     feature_channels_menu,
     join_verification_menu,
@@ -24,6 +25,7 @@ from channel_manager_bot.keyboards import (
     timing_menu,
     ttl_label,
     ttl_menu,
+    welcome_buttons_menu,
     welcome_menu,
 )
 from channel_manager_bot.models import (
@@ -114,6 +116,18 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "welcome:preview:-1001234567890" in welcome_callbacks
     assert "feature:channels:welcome" in welcome_callbacks
 
+    welcome_button_callbacks = [
+        button.callback_data
+        for row in welcome_buttons_menu(
+            channel.telegram_chat_id,
+            channel.welcome_buttons,
+        ).inline_keyboard
+        for button in row
+    ]
+    assert "welcome:bdel:1" in welcome_button_callbacks
+    assert "welcome:add:-1001234567890" in welcome_button_callbacks
+    assert "welcome:menu:-1001234567890" in welcome_button_callbacks
+
 
 def test_feature_channel_list_routes_directly_to_selected_configuration():
     channel = Channel(
@@ -187,6 +201,18 @@ def test_configured_farewell_has_preview_and_button_management():
     assert "farewell:manage:-1001234567890" in callbacks
     assert "farewell:preview:-1001234567890" in callbacks
     assert "farewell:toggle:-1001234567890" in callbacks
+
+    manage_callbacks = [
+        button.callback_data
+        for row in farewell_buttons_menu(
+            channel.telegram_chat_id,
+            channel.farewell_buttons,
+        ).inline_keyboard
+        for button in row
+    ]
+    assert "farewell:bdel:2" in manage_callbacks
+    assert "farewell:add:-1001234567890" in manage_callbacks
+    assert "farewell:menu:-1001234567890" in manage_callbacks
 
 
 def test_channel_post_text_menu_offers_preview_toggle_and_clear():
