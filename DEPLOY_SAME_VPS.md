@@ -2,6 +2,11 @@
 
 Esta guía instala el administrador de canales en el mismo VPS sin modificar el despliegue existente de Frexo.
 
+Si ya lo instalaste en `/opt/channel-manager/channel-manager-bot`, conserva esa
+ruta para todos los comandos. Las rutas `/opt/channel-manager` que aparecen en
+la guía describen la instalación plana original; el nombre Compose sigue siendo
+`channel-manager` en ambos casos.
+
 ## División final
 
 ```text
@@ -55,7 +60,7 @@ No continúes si Frexo no aparece activo o si el disco está casi lleno.
 Desde PowerShell en tu computadora, cambia la ruta del archivo y la IP:
 
 ```powershell
-scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.12.1.zip" frexo@IP_DE_TU_VPS:/home/frexo/
+scp "$env:USERPROFILE\Downloads\telegram-channel-manager-v0.13.0.zip" frexo@IP_DE_TU_VPS:/home/frexo/
 ```
 
 De regreso en el VPS, confirma primero que el destino no exista:
@@ -68,7 +73,7 @@ Si imprime `Destino disponible`, ejecuta:
 
 ```bash
 cd /opt
-unzip /home/frexo/telegram-channel-manager-v0.12.1.zip
+unzip /home/frexo/telegram-channel-manager-v0.13.0.zip
 mv /opt/telegram-channel-manager /opt/channel-manager
 cd /opt/channel-manager
 ```

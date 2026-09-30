@@ -47,6 +47,7 @@ TRANSLATIONS = {
         "chats": "Canales y grupos",
         "stats": "Estadísticas",
         "members": "Miembros",
+        "collaboration": "Colaboración",
         "language": "Idioma",
         "back_home": "Menú principal",
         "home_title": "Panel de administración",
@@ -61,6 +62,7 @@ TRANSLATIONS = {
             "• crea, programa y repite publicaciones;\n"
             "• reutiliza plantillas y organiza tu plan de contenido;\n"
             "• configura bienvenidas, firmas, filtros y miembros;\n"
+            "• invita colaboradores con roles y consulta la actividad;\n"
             "• reenvía contenido automáticamente entre tus chats;\n"
             "• consulta entregas y estadísticas.\n\n"
             "Todo se configura desde Telegram. Elige una opción para comenzar."
@@ -80,6 +82,7 @@ TRANSLATIONS = {
         "chats": "Channels and groups",
         "stats": "Statistics",
         "members": "Members",
+        "collaboration": "Collaboration",
         "language": "Language",
         "back_home": "Main menu",
         "home_title": "Administration panel",
@@ -94,6 +97,7 @@ TRANSLATIONS = {
             "• create, schedule and repeat posts;\n"
             "• reuse templates and organize your content plan;\n"
             "• configure welcomes, signatures, filters and members;\n"
+            "• invite collaborators with roles and review activity;\n"
             "• forward content automatically between your chats;\n"
             "• review deliveries and statistics.\n\n"
             "Everything is configured from Telegram. Choose an option to begin."
@@ -113,6 +117,7 @@ TRANSLATIONS = {
         "chats": "Canais e grupos",
         "stats": "Estatísticas",
         "members": "Membros",
+        "collaboration": "Colaboração",
         "language": "Idioma",
         "back_home": "Menu principal",
         "home_title": "Painel de administração",
@@ -146,6 +151,7 @@ TRANSLATIONS = {
         "chats": "Canaux et groupes",
         "stats": "Statistiques",
         "members": "Membres",
+        "collaboration": "Collaboration",
         "language": "Langue",
         "back_home": "Menu principal",
         "home_title": "Panneau d’administration",
@@ -179,6 +185,7 @@ TRANSLATIONS = {
         "chats": "Kanäle und Gruppen",
         "stats": "Statistiken",
         "members": "Mitglieder",
+        "collaboration": "Zusammenarbeit",
         "language": "Sprache",
         "back_home": "Hauptmenü",
         "home_title": "Administrationsbereich",
@@ -212,6 +219,7 @@ TRANSLATIONS = {
         "chats": "Canali e gruppi",
         "stats": "Statistiche",
         "members": "Membri",
+        "collaboration": "Collaborazione",
         "language": "Lingua",
         "back_home": "Menu principale",
         "home_title": "Pannello di amministrazione",
@@ -245,6 +253,7 @@ TRANSLATIONS = {
         "chats": "Каналы и группы",
         "stats": "Статистика",
         "members": "Участники",
+        "collaboration": "Совместная работа",
         "language": "Язык",
         "back_home": "Главное меню",
         "home_title": "Панель управления",
@@ -278,6 +287,7 @@ TRANSLATIONS = {
         "chats": "القنوات والمجموعات",
         "stats": "الإحصاءات",
         "members": "الأعضاء",
+        "collaboration": "التعاون",
         "language": "اللغة",
         "back_home": "القائمة الرئيسية",
         "home_title": "لوحة الإدارة",
@@ -311,6 +321,7 @@ TRANSLATIONS = {
         "chats": "चैनल और समूह",
         "stats": "आँकड़े",
         "members": "सदस्य",
+        "collaboration": "सहयोग",
         "language": "भाषा",
         "back_home": "मुख्य मेनू",
         "home_title": "प्रशासन पैनल",
@@ -344,6 +355,7 @@ TRANSLATIONS = {
         "chats": "频道和群组",
         "stats": "统计",
         "members": "成员",
+        "collaboration": "协作",
         "language": "语言",
         "back_home": "主菜单",
         "home_title": "管理面板",
@@ -377,6 +389,7 @@ TRANSLATIONS = {
         "chats": "チャンネルとグループ",
         "stats": "統計",
         "members": "メンバー",
+        "collaboration": "コラボレーション",
         "language": "言語",
         "back_home": "メインメニュー",
         "home_title": "管理パネル",
@@ -410,6 +423,7 @@ TRANSLATIONS = {
         "chats": "채널 및 그룹",
         "stats": "통계",
         "members": "멤버",
+        "collaboration": "협업",
         "language": "언어",
         "back_home": "메인 메뉴",
         "home_title": "관리 패널",

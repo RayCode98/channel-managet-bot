@@ -5,6 +5,8 @@ from channel_manager_bot.keyboards import (
     autocomplete_buttons_menu,
     channel_detail_menu,
     channel_post_text_menu,
+    chat_connection_keyboard,
+    collaboration_menu,
     composer_menu,
     farewell_buttons_menu,
     farewell_menu,
@@ -110,7 +112,12 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "members:channels" in main_callbacks
     assert "language:list" in main_callbacks
     assert "settings:show" not in main_callbacks
-    assert channel_callbacks == ["channel:refresh:-1001234567890", "channels:list"]
+    assert channel_callbacks == [
+        "channel:refresh:-1001234567890",
+        "channel:diagnose:-1001234567890",
+        "channel:admins:-1001234567890",
+        "channels:list",
+    ]
     assert "welcome:buttons:-1001234567890" in welcome_callbacks
     assert "welcome:manage:-1001234567890" in welcome_callbacks
     assert "welcome:preview:-1001234567890" in welcome_callbacks
@@ -127,6 +134,30 @@ def test_feature_first_navigation_and_welcome_menu():
     assert "welcome:bdel:1" in welcome_button_callbacks
     assert "welcome:add:-1001234567890" in welcome_button_callbacks
     assert "welcome:menu:-1001234567890" in welcome_button_callbacks
+
+
+def test_explicit_chat_picker_and_collaboration_menu_are_scoped():
+    picker = chat_connection_keyboard(12345)
+
+    assert picker.keyboard[0][0].request_chat.request_id == 12345
+    assert picker.keyboard[0][0].request_chat.chat_is_channel is True
+    assert picker.keyboard[0][1].request_chat.request_id == 12346
+    assert picker.keyboard[0][1].request_chat.chat_is_channel is False
+    assert picker.keyboard[1][0].text == "❌ Cancelar"
+
+    collaboration = collaboration_menu(
+        True,
+        [(10, "Ana", "✍️ Editor"), (20, "Luis", "🛠 Administrador")],
+    )
+    callbacks = [
+        button.callback_data
+        for row in collaboration.inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    assert callbacks[:2] == ["collab:member:10", "collab:member:20"]
+    assert "collab:invite" in callbacks
+    assert "collab:logs" in callbacks
 
 
 def test_feature_channel_list_routes_directly_to_selected_configuration():

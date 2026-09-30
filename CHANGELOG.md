@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 0.13.0
+
+- Agrega conexión explícita con el selector nativo de Telegram para elegir un canal o grupo sin depender únicamente del evento `my_chat_member`.
+- Valida que la persona que vincula el chat sea administradora y registra el método de conexión.
+- Muestra diagnóstico de permisos para publicar, eliminar, editar, fijar, invitar, restringir y administrar temas.
+- Actualiza periódicamente los permisos y envía alertas privadas cuando una capacidad cambia o el bot pierde acceso.
+- Agrega **Colaboración** con invitaciones por enlace profundo de un solo uso, caducidad de 7 días y roles de administrador/editor.
+- Permite cambiar roles, retirar accesos y consultar los últimos eventos de auditoría desde Telegram.
+- Permite sincronizar los administradores actuales de un chat como colaboradores editores sin sobrescribir propietarios o administradores existentes.
+- Incluye migración incremental `20260930_0012_connection_collaboration`, compatible con instalaciones anteriores.
+
 ## 0.12.1
 
 - Agrega **➕ Agregar botón** dentro de la administración individual de botones de bienvenidas.

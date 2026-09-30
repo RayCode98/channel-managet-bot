@@ -3,7 +3,7 @@ from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatType
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ErrorEvent, Message
 from redis.asyncio import Redis
@@ -13,17 +13,36 @@ from ..config import get_settings
 from ..database import SessionFactory
 from ..i18n import tr
 from ..keyboards import main_menu
-from ..repository import ensure_user_workspace
+from ..repository import accept_workspace_invite, ensure_user_workspace
 
 router = Router(name="common")
 logger = logging.getLogger(__name__)
 
 
 @router.message(CommandStart(), F.chat.type == ChatType.PRIVATE)
-async def start(message: Message, state: FSMContext) -> None:
+async def start(
+    message: Message,
+    state: FSMContext,
+    command: CommandObject,
+) -> None:
     await state.clear()
+    invite_notice = None
     async with SessionFactory() as session:
+        if command.args and command.args.startswith("ws_"):
+            _, status = await accept_workspace_invite(
+                session,
+                message.from_user,
+                command.args.removeprefix("ws_")[:64],
+            )
+            invite_notice = {
+                "accepted": "✅ Invitación aceptada. Ya puedes colaborar en este espacio.",
+                "used": "ℹ️ Esta invitación ya fue utilizada; abrí tu espacio de trabajo habitual.",
+                "expired": "⚠️ Esta invitación expiró; abrí tu espacio de trabajo habitual.",
+                "invalid": "⚠️ La invitación no es válida; abrí tu espacio de trabajo habitual.",
+            }.get(status)
         workspace = await ensure_user_workspace(session, message.from_user)
+    if invite_notice:
+        await message.answer(invite_notice)
     await message.answer(
         tr("start", workspace=escape(workspace.name)),
         reply_markup=main_menu(),

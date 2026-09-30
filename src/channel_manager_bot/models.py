@@ -50,6 +50,9 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(64))
     full_name: Mapped[str] = mapped_column(String(255))
+    active_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -73,6 +76,22 @@ class Membership(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id", ondelete="CASCADE"))
     role: Mapped[Role] = mapped_column(Enum(Role, name="role_enum"), default=Role.editor)
+
+
+class WorkspaceInvite(Base):
+    __tablename__ = "workspace_invites"
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    role: Mapped[Role] = mapped_column(Enum(Role, name="role_enum"), default=Role.editor)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.telegram_id", ondelete="SET NULL")
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Channel(Base):
@@ -101,6 +120,13 @@ class Channel(Base):
     can_post_messages: Mapped[bool] = mapped_column(Boolean, default=False)
     can_invite_users: Mapped[bool] = mapped_column(Boolean, default=False)
     can_restrict_members: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_delete_messages: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_edit_messages: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_pin_messages: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_manage_topics: Mapped[bool] = mapped_column(Boolean, default=False)
+    permission_issue: Mapped[str | None] = mapped_column(Text)
+    last_permission_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connection_method: Mapped[str] = mapped_column(String(32), default="membership_event")
     member_count: Mapped[int | None] = mapped_column(Integer)
     previous_member_count: Mapped[int | None] = mapped_column(Integer)
     welcome_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -1,7 +1,14 @@
 import uuid
 from collections import defaultdict
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    ChatAdministratorRights,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    KeyboardButtonRequestChat,
+    ReplyKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .i18n import LANGUAGES, current_language, current_language_option, tr
@@ -54,6 +61,7 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text=f"🛡 {tr('join_filters')}", callback_data="feature:channels:joinfilter")
     builder.button(text=f"↪️ {tr('relay')}", callback_data="relay:sources")
     builder.button(text=f"👥 {tr('members')}", callback_data="members:channels")
+    builder.button(text=f"🤝 {tr('collaboration')}", callback_data="collab:menu")
     builder.button(text=f"📚 {tr('history')}", callback_data="pub:list")
     builder.button(text=f"📚 {tr('chats')}", callback_data="channels:list")
     builder.button(text=f"📊 {tr('stats')}", callback_data="stats:show")
@@ -62,7 +70,7 @@ def main_menu() -> InlineKeyboardMarkup:
         text=f"{language.flag} {tr('language')}: {language.name}",
         callback_data="language:list",
     )
-    builder.adjust(1, 2, 2, 2, 2, 2, 2, 1)
+    builder.adjust(1, 2, 2, 2, 2, 2, 2, 2, 1)
     return builder.as_markup()
 
 
@@ -88,10 +96,15 @@ def language_menu() -> InlineKeyboardMarkup:
 
 
 def channels_menu(channels: list[Channel] | None = None) -> InlineKeyboardMarkup:
+    def channel_label(channel: Channel) -> str:
+        status_value = getattr(channel.status, "value", channel.status or "active")
+        status = "⚠️" if status_value != "active" else "✅"
+        return f"{status} {chat_icon(channel)} {channel.title}"
+
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{chat_icon(channel)} {channel.title}"[:64],
+                text=channel_label(channel)[:64],
                 callback_data=f"channel:open:{channel.telegram_chat_id}",
             )
         ]
@@ -116,9 +129,167 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
                     callback_data=f"channel:refresh:{channel.telegram_chat_id}",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Diagnóstico de permisos",
+                    callback_data=f"channel:diagnose:{channel.telegram_chat_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👥 Sincronizar administradores",
+                    callback_data=f"channel:admins:{channel.telegram_chat_id}",
+                )
+            ],
             [InlineKeyboardButton(text="⬅️ Canales y grupos", callback_data="channels:list")],
         ]
     )
+
+
+def chat_connection_keyboard(request_id: int) -> ReplyKeyboardMarkup:
+    """Native Telegram chat picker used for an explicit, unambiguous connection."""
+    def required_rights(*, channel: bool) -> ChatAdministratorRights:
+        return ChatAdministratorRights(
+            is_anonymous=False,
+            can_manage_chat=True,
+            can_delete_messages=False,
+            can_manage_video_chats=False,
+            can_restrict_members=False,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=False,
+            can_post_stories=False,
+            can_edit_stories=False,
+            can_delete_stories=False,
+            can_send_welcome_messages=False,
+            can_post_messages=True if channel else None,
+            can_edit_messages=False if channel else None,
+            can_pin_messages=False if not channel else None,
+            can_manage_topics=False if not channel else None,
+        )
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="📢 Seleccionar canal",
+                    request_chat=KeyboardButtonRequestChat(
+                        request_id=request_id,
+                        chat_is_channel=True,
+                        bot_is_member=True,
+                        bot_administrator_rights=required_rights(channel=True),
+                        request_title=True,
+                        request_username=True,
+                    ),
+                ),
+                KeyboardButton(
+                    text="👥 Seleccionar grupo",
+                    request_chat=KeyboardButtonRequestChat(
+                        request_id=request_id + 1,
+                        chat_is_channel=False,
+                        bot_is_member=True,
+                        bot_administrator_rights=required_rights(channel=False),
+                        request_title=True,
+                        request_username=True,
+                    ),
+                ),
+            ],
+            [KeyboardButton(text="❌ Cancelar")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="Elige el canal o grupo conectado",
+    )
+
+
+def collaboration_menu(
+    can_manage: bool,
+    members: list[tuple[int, str, str]] | None = None,
+    workspace_count: int = 1,
+) -> InlineKeyboardMarkup:
+    rows = []
+    for user_id, name, role in members or []:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{role} · {name}"[:64], callback_data=f"collab:member:{user_id}"
+                )
+            ]
+        )
+    if can_manage:
+        rows.append(
+            [InlineKeyboardButton(text="➕ Invitar colaborador", callback_data="collab:invite")]
+        )
+    if workspace_count > 1:
+        rows.append(
+            [InlineKeyboardButton(text="🔄 Cambiar espacio", callback_data="collab:workspaces")]
+        )
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="📜 Ver actividad", callback_data="collab:logs")],
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def workspace_switch_menu(workspaces) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if active else '▫️'} {name}"[:64],
+                callback_data=f"collab:switch:{workspace_id}",
+            )
+        ]
+        for workspace_id, name, active in workspaces
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ Colaboración", callback_data="collab:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def invite_role_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✍️ Editor (publica y programa)", callback_data="collab:invite:editor"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🛠 Administrador (gestiona equipo)", callback_data="collab:invite:admin"
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ Colaboración", callback_data="collab:menu")],
+        ]
+    )
+
+
+def collaborator_detail_menu(user_id: int, role: str, can_manage: bool) -> InlineKeyboardMarkup:
+    rows = []
+    if can_manage and role != "owner":
+        rows.extend(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="🛠 Cambiar a administrador",
+                        callback_data=f"collab:setrole:{user_id}:admin",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✍️ Cambiar a editor",
+                        callback_data=f"collab:setrole:{user_id}:editor",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🗑 Quitar acceso", callback_data=f"collab:remove:{user_id}"
+                    )
+                ],
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ Colaboración", callback_data="collab:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def feature_channels_menu(channels: list[Channel], kind: str) -> InlineKeyboardMarkup:

@@ -1,11 +1,12 @@
 import logging
+import secrets
 from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatMemberStatus, ChatType
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
+from aiogram.types import CallbackQuery, ChatMemberUpdated, Message, ReplyKeyboardRemove
 from sqlalchemy import select
 
 from ..database import SessionFactory
@@ -13,19 +14,28 @@ from ..keyboards import (
     back_home,
     channel_detail_menu,
     channels_menu,
+    chat_connection_keyboard,
     member_approval_label,
     welcome_buttons_menu,
     welcome_menu,
 )
-from ..models import AuditLog, Channel, ChannelStatus, Membership, WelcomeButton
+from ..models import AuditLog, Channel, ChannelStatus, Membership, Role, User, WelcomeButton
 from ..repository import (
     can_add_channel,
+    can_manage_workspace,
     ensure_user_workspace,
-    get_active_channels,
+    get_managed_channels,
     get_workspace,
     utcnow,
 )
-from ..services.channel_sync import normalize_chat_type, refresh_channels
+from ..services.channel_sync import (
+    apply_channel_snapshot,
+    fetch_channel_snapshot,
+    membership_permissions,
+    normalize_chat_type,
+    permission_issue_text,
+    refresh_channels,
+)
 from ..services.welcome import (
     MAX_WELCOME_BUTTONS,
     content_from_message,
@@ -33,7 +43,7 @@ from ..services.welcome import (
     parse_welcome_buttons,
     send_channel_welcome,
 )
-from ..states import ChannelWelcomeFlow
+from ..states import ChannelConnectionFlow, ChannelWelcomeFlow
 
 router = Router(name="channels")
 logger = logging.getLogger(__name__)
@@ -51,7 +61,7 @@ async def owned_channel(session, channel_id: int, user_id: int) -> Channel | Non
         select(Channel).where(
             Channel.telegram_chat_id == channel_id,
             Channel.workspace_id == workspace.id,
-            Channel.status == ChannelStatus.active,
+            Channel.status != ChannelStatus.removed,
         )
     )
 
@@ -59,7 +69,7 @@ async def owned_channel(session, channel_id: int, user_id: int) -> Channel | Non
 async def render_channels_list(callback: CallbackQuery) -> None:
     async with SessionFactory() as session:
         workspace = await get_workspace(session, callback.from_user.id)
-        channels = await get_active_channels(session, workspace.id) if workspace else []
+        channels = await get_managed_channels(session, workspace.id) if workspace else []
     if channels:
         lines = ["📚 <b>Canales y grupos vinculados</b>", ""]
         for channel in channels:
@@ -94,6 +104,26 @@ def channel_detail_text(channel: Channel) -> str:
     )
     username = f"@{channel.username}" if channel.username else f"{chat_kind(channel)} privado"
     members = f"{channel.member_count:,}" if channel.member_count is not None else "No disponible"
+    status_value = getattr(channel.status, "value", channel.status or ChannelStatus.active.value)
+    connection_status = {
+        ChannelStatus.active.value: "✅ Activo",
+        ChannelStatus.missing_permissions.value: "⚠️ Faltan permisos",
+        ChannelStatus.removed.value: "🚫 Sin acceso",
+    }.get(status_value, "⚠️ Estado desconocido")
+    permission_status = (
+        f"⚠️ Faltan: {escape(channel.permission_issue)}"
+        if channel.permission_issue
+        else "✅ Publicación disponible"
+    )
+    permission_matrix = (
+        f"Publicar {'✅' if channel.can_post_messages else '❌'} · "
+        f"Eliminar {'✅' if channel.can_delete_messages else '❌'} · "
+        f"Invitar {'✅' if channel.can_invite_users else '❌'}\n"
+        f"Restringir {'✅' if channel.can_restrict_members else '❌'} · "
+        f"Editar {'✅' if channel.can_edit_messages else '❌'} · "
+        f"Fijar {'✅' if channel.can_pin_messages else '❌'} · "
+        f"Temas {'✅' if channel.can_manage_topics else '❌'}"
+    )
     checked = (
         channel.last_checked_at.strftime("%d/%m/%Y %H:%M UTC")
         if channel.last_checked_at
@@ -102,9 +132,11 @@ def channel_detail_text(channel: Channel) -> str:
     return (
         f"⚙️ <b>{escape(channel.title)}</b>\n\n"
         f"🏷 <b>Tipo:</b> {chat_kind(channel)}\n"
+        f"🔌 <b>Conexión:</b> {connection_status}\n"
         f"🔗 <b>Usuario:</b> {escape(username)}\n"
         f"👥 <b>Miembros:</b> {members}\n"
         f"🔄 <b>Última sincronización:</b> {checked}\n\n"
+        f"🔐 <b>Permisos:</b> {permission_status}\n{permission_matrix}\n\n"
         f"👋 <b>Bienvenida:</b> {status}\n"
         f"🚪 <b>Despedida:</b> {farewell_status}\n"
         f"🪄 <b>Autocompletado:</b> {autocomplete_status}\n"
@@ -178,6 +210,123 @@ async def refresh_one_channel(callback: CallbackQuery) -> None:
         return
     await callback.message.edit_text(
         channel_detail_text(channel),
+        reply_markup=channel_detail_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("channel:diagnose:"))
+async def diagnose_channel(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+    if channel is None:
+        await callback.answer("Canal o grupo no encontrado.", show_alert=True)
+        return
+    await callback.answer("Consultando permisos en Telegram…")
+    try:
+        snapshot = await fetch_channel_snapshot(callback.bot, channel_id)
+    except TelegramAPIError as exc:
+        logger.info("Permission diagnostic failed for %s: %s", channel_id, exc)
+        await callback.message.edit_text(
+            channel_detail_text(channel)
+            + "\n\n❌ Telegram no permitió consultar este chat. "
+            "Confirma que el bot siga siendo administrador.",
+            reply_markup=channel_detail_menu(channel),
+        )
+        return
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+        if channel is None:
+            await callback.answer("Canal o grupo no encontrado.", show_alert=True)
+            return
+        apply_channel_snapshot(channel, snapshot)
+        channel.connection_method = channel.connection_method or "membership_event"
+        await session.commit()
+    await callback.message.edit_text(
+        channel_detail_text(channel),
+        reply_markup=channel_detail_menu(channel),
+    )
+
+
+@router.callback_query(F.data.startswith("channel:admins:"))
+async def sync_channel_administrators(callback: CallbackQuery) -> None:
+    channel_id = int(callback.data.rsplit(":", 1)[1])
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+        allowed = bool(
+            channel
+            and await can_manage_workspace(session, channel.workspace_id, callback.from_user.id)
+        )
+    if channel is None:
+        await callback.answer("Canal o grupo no encontrado.", show_alert=True)
+        return
+    if not allowed:
+        await callback.answer(
+            "Solo un propietario o administrador puede sincronizar miembros.",
+            show_alert=True,
+        )
+        return
+    await callback.answer("Sincronizando administradores…")
+    try:
+        administrators = await callback.bot.get_chat_administrators(channel_id)
+    except TelegramAPIError as exc:
+        logger.info("Could not sync administrators for %s: %s", channel_id, exc)
+        await callback.message.answer("Telegram no permitió consultar los administradores.")
+        return
+    added = 0
+    names: list[str] = []
+    async with SessionFactory() as session:
+        channel = await owned_channel(session, channel_id, callback.from_user.id)
+        if channel is None:
+            await callback.message.answer("Canal o grupo no encontrado.")
+            return
+        for administrator in administrators:
+            telegram_user = administrator.user
+            if telegram_user.is_bot:
+                continue
+            user = await session.get(User, telegram_user.id)
+            if user is None:
+                user = User(
+                    telegram_id=telegram_user.id,
+                    username=telegram_user.username,
+                    full_name=telegram_user.full_name,
+                )
+                session.add(user)
+            else:
+                user.username = telegram_user.username
+                user.full_name = telegram_user.full_name
+            existing = await session.scalar(
+                select(Membership).where(
+                    Membership.workspace_id == channel.workspace_id,
+                    Membership.user_id == telegram_user.id,
+                )
+            )
+            if existing is None:
+                session.add(
+                    Membership(
+                        workspace_id=channel.workspace_id,
+                        user_id=telegram_user.id,
+                        role=Role.editor,
+                    )
+                )
+                added += 1
+            names.append(telegram_user.full_name)
+        session.add(
+            AuditLog(
+                workspace_id=channel.workspace_id,
+                actor_user_id=callback.from_user.id,
+                action="chat.admins_synced",
+                details=f"chat_id={channel_id};admins={len(names)};added={added}",
+            )
+        )
+        await session.commit()
+    preview = ", ".join(escape(name) for name in names[:10]) or "No se encontraron administradores"
+    if len(names) > 10:
+        preview += f" y {len(names) - 10} más"
+    await callback.message.edit_text(
+        channel_detail_text(channel)
+        + f"\n\n👥 <b>Administradores sincronizados:</b> {len(names)}\n"
+        + f"Nuevos colaboradores: <b>{added}</b>\n{preview}",
         reply_markup=channel_detail_menu(channel),
     )
 
@@ -535,24 +684,142 @@ async def clear_channel_welcome(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "channels:add")
-async def add_channel_instructions(callback: CallbackQuery) -> None:
+async def add_channel_instructions(callback: CallbackQuery, state: FSMContext) -> None:
     async with SessionFactory() as session:
         workspace = await get_workspace(session, callback.from_user.id)
-        allowed = await can_add_channel(session, workspace.id)
+        allowed = bool(
+            workspace
+            and await can_manage_workspace(session, workspace.id, callback.from_user.id)
+            and await can_add_channel(session, workspace.id)
+        )
     if not allowed:
-        await callback.answer("Tu cuenta alcanzó el límite de chats vinculados.", show_alert=True)
+        await callback.answer(
+            "Solo un propietario/administrador puede agregar chats, o alcanzaste el límite.",
+            show_alert=True,
+        )
         return
-    me = await callback.bot.get_me()
+    request_id = secrets.randbelow(2_000_000_000 - 2) + 1
+    await state.set_state(ChannelConnectionFlow.waiting_chat_share)
+    await state.update_data(chat_request_id=request_id)
     await callback.message.edit_text(
         "➕ <b>Agregar un canal o grupo</b>\n\n"
-        f"1. Abre el canal, grupo o supergrupo y agrega a @{me.username} como administrador.\n"
-        "2. En canales concede <b>Publicar mensajes</b>. Para filtros de unión concede "
-        "también <b>Invitar usuarios</b> y <b>Restringir miembros</b>.\n"
-        "3. Regresa aquí; el chat se registrará automáticamente.\n\n"
-        "La persona que agrega al bot debe ser la misma que usa este panel.",
+        "Usa los botones nativos de Telegram para seleccionar el chat que ya conectaste. "
+        "Así evitamos confundir canales con grupos o cuentas distintas.\n\n"
+        "El bot debe ser administrador. Para publicar en un canal concede "
+        "<b>Publicar mensajes</b>; para filtros de unión agrega también "
+        "<b>Invitar usuarios</b> y <b>Restringir miembros</b>.\n\n"
+        "La persona que selecciona el chat debe ser administradora de ese chat.",
         reply_markup=back_home(),
     )
+    await callback.message.answer(
+        "Selecciona un chat conectado:",
+        reply_markup=chat_connection_keyboard(request_id),
+    )
     await callback.answer()
+
+
+@router.message(
+    ChannelConnectionFlow.waiting_chat_share,
+    F.chat.type == ChatType.PRIVATE,
+    F.chat_shared,
+)
+async def connect_shared_chat(message: Message, state: FSMContext, bot: Bot) -> None:
+    shared = message.chat_shared
+    data = await state.get_data()
+    expected_request_id = data.get("chat_request_id")
+    if expected_request_id not in {shared.request_id, shared.request_id - 1}:
+        await message.answer("⚠️ Esta selección no pertenece a una solicitud activa.")
+        return
+    try:
+        actor_member = await bot.get_chat_member(shared.chat_id, message.from_user.id)
+        if actor_member.status not in {
+            ChatMemberStatus.CREATOR,
+            ChatMemberStatus.ADMINISTRATOR,
+        }:
+            await message.answer(
+                "⚠️ Debes ser administrador o propietario del chat para conectarlo."
+            )
+            return
+        snapshot = await fetch_channel_snapshot(bot, shared.chat_id)
+        chat = await bot.get_chat(shared.chat_id)
+    except TelegramAPIError as exc:
+        logger.info("Explicit chat connection failed for %s: %s", shared.chat_id, exc)
+        await message.answer(
+            "❌ No pude consultar ese chat. Confirma que el bot siga siendo administrador "
+            "y vuelve a pulsar Seleccionar canal o Seleccionar grupo."
+        )
+        return
+
+    async with SessionFactory() as session:
+        workspace = await ensure_user_workspace(session, message.from_user)
+        if not await can_manage_workspace(session, workspace.id, message.from_user.id):
+            await message.answer("⚠️ Solo un propietario o administrador puede conectar chats.")
+            return
+        existing = await session.get(Channel, shared.chat_id)
+        if existing is not None and existing.workspace_id != workspace.id:
+            member_of_owner_workspace = await session.scalar(
+                select(Membership.id).where(
+                    Membership.workspace_id == existing.workspace_id,
+                    Membership.user_id == message.from_user.id,
+                )
+            )
+            if member_of_owner_workspace is None:
+                await message.answer(
+                    "⚠️ Este chat ya está vinculado a otro espacio de trabajo. "
+                    "Debe desvincularlo su propietario."
+                )
+                return
+        if existing is None and not await can_add_channel(session, workspace.id):
+            await message.answer("⚠️ Alcanzaste el límite de chats vinculados.")
+            return
+        if existing is None:
+            existing = Channel(
+                telegram_chat_id=shared.chat_id,
+                workspace_id=workspace.id,
+                title=chat.title or shared.title or str(shared.chat_id),
+                username=chat.username or shared.username,
+                chat_type=normalize_chat_type(chat.type),
+                added_by_user_id=message.from_user.id,
+            )
+            session.add(existing)
+        apply_channel_snapshot(existing, snapshot)
+        existing.connection_method = "chat_shared"
+        session.add(
+            AuditLog(
+                workspace_id=existing.workspace_id,
+                actor_user_id=message.from_user.id,
+                action="chat.connected_explicit",
+                details=(
+                    f"chat_id={shared.chat_id};type={snapshot.chat_type};"
+                    f"status={snapshot.status.value};issue={snapshot.permission_issue or 'none'}"
+                ),
+            )
+        )
+        await session.commit()
+    await state.clear()
+    status_line = (
+        "✅ Puede publicar."
+        if snapshot.status == ChannelStatus.active
+        else "⚠️ Está conectado, pero necesita permisos para publicar."
+    )
+    issue_line = (
+        f"\nPermisos a revisar: <b>{escape(snapshot.permission_issue)}</b>."
+        if snapshot.permission_issue
+        else ""
+    )
+    await message.answer(
+        f"✅ <b>{escape(existing.title)}</b> quedó conectado.\n{status_line}{issue_line}",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(ChannelConnectionFlow.waiting_chat_share, F.chat.type == ChatType.PRIVATE, F.text)
+async def cancel_chat_connection(message: Message, state: FSMContext) -> None:
+    if message.text.strip().casefold() != "❌ cancelar":
+        await message.answer("Usa los botones de selección o pulsa ❌ Cancelar.")
+        return
+    await state.clear()
+    await message.answer("Operación cancelada.", reply_markup=ReplyKeyboardRemove())
 
 
 @router.my_chat_member(F.chat.type.in_({ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -571,20 +838,12 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
         workspace = await ensure_user_workspace(session, actor)
         existing = await session.get(Channel, event.chat.id)
         new_member = event.new_chat_member
-        is_group = chat_type in {ChatType.GROUP.value, ChatType.SUPERGROUP.value}
         is_owner = new_member.status == ChatMemberStatus.CREATOR
         is_admin = is_owner or new_member.status == ChatMemberStatus.ADMINISTRATOR
-        can_post = (
-            is_admin
-            if is_group
-            else is_owner or bool(getattr(new_member, "can_post_messages", False))
-        )
-        can_invite = is_owner or (
-            bool(getattr(new_member, "can_invite_users", False)) if is_admin else False
-        )
-        can_restrict = is_owner or (
-            bool(getattr(new_member, "can_restrict_members", False)) if is_admin else False
-        )
+        permissions = membership_permissions(new_member, chat_type)
+        can_post = permissions["can_post_messages"]
+        can_invite = permissions["can_invite_users"]
+        can_restrict = permissions["can_restrict_members"]
 
         if is_admin:
             if existing is not None and existing.workspace_id != workspace.id:
@@ -624,6 +883,12 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
             existing.can_post_messages = can_post
             existing.can_invite_users = can_invite
             existing.can_restrict_members = can_restrict
+            existing.can_delete_messages = permissions["can_delete_messages"]
+            existing.can_edit_messages = permissions["can_edit_messages"]
+            existing.can_pin_messages = permissions["can_pin_messages"]
+            existing.can_manage_topics = permissions["can_manage_topics"]
+            existing.permission_issue = permission_issue_text(permissions, chat_type)
+            existing.connection_method = "membership_event"
             existing.last_checked_at = utcnow()
             session.add(
                 AuditLog(
@@ -633,7 +898,8 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
                     details=(
                         f"chat_id={event.chat.id};type={chat_type};"
                         f"can_post={can_post};"
-                        f"can_invite={can_invite};can_restrict={can_restrict}"
+                        f"can_invite={can_invite};can_restrict={can_restrict};"
+                        f"issue={existing.permission_issue or 'none'}"
                     ),
                 )
             )
@@ -664,6 +930,11 @@ async def bot_membership_changed(event: ChatMemberUpdated, bot: Bot) -> None:
             existing.can_post_messages = False
             existing.can_invite_users = False
             existing.can_restrict_members = False
+            existing.can_delete_messages = False
+            existing.can_edit_messages = False
+            existing.can_pin_messages = False
+            existing.can_manage_topics = False
+            existing.permission_issue = "Telegram no permite acceder a este chat"
             session.add(
                 AuditLog(
                     workspace_id=existing.workspace_id,

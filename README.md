@@ -6,8 +6,12 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 
 - Alta automática del cliente con espacio de trabajo aislado.
 - Roles de propietario, administrador y editor preparados en base de datos.
-- Conexión automática de canales, grupos y supergrupos cuando el bot es promovido a administrador.
-- Verificación del permiso para publicar y alerta si el bot pierde acceso.
+- Conexión explícita desde Telegram mediante selector nativo de canales y grupos, con validación del administrador que realiza la vinculación.
+- Conexión automática compatible con instalaciones anteriores cuando el bot es promovido a administrador.
+- Diagnóstico de permisos de publicación, eliminación, invitaciones, restricciones, fijado y temas.
+- Alertas privadas cuando cambian los permisos o el bot pierde acceso, con límite de una alerta diaria por chat.
+- Colaboración por espacio de trabajo mediante enlaces de invitación de un solo uso, roles de propietario, administrador y editor.
+- Sincronización opcional de los administradores de cada canal o grupo y registro de actividad.
 - Publicaciones de texto enriquecido, foto, video, animación, audio, voz o documento.
 - Conservación del formato y de los emojis premium mediante copia nativa y entidades `custom_emoji`.
 - Hasta 20 botones URL por publicación.
@@ -115,7 +119,13 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.12.0, sigue [`UPGRADE_V0.12.1.md`](UPGRADE_V0.12.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.12.1, sigue [`UPGRADE_V0.13.0.md`](UPGRADE_V0.13.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+
+En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
+Telegram muestra un selector nativo para elegir exactamente el chat. Después de
+conectarlo, abre **Diagnóstico de permisos** para comprobar las capacidades del
+bot. La sección **Colaboración** crea enlaces de invitación de un solo uso y
+permite administrar roles y actividad sin compartir credenciales.
 
 ## Emojis premium
 

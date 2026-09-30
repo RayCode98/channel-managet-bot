@@ -9,7 +9,9 @@ from channel_manager_bot.services.channel_sync import (
     fetch_channel_snapshot,
     membership_access,
     membership_capabilities,
+    membership_permissions,
     normalize_chat_type,
+    permission_issue_text,
 )
 
 
@@ -44,6 +46,26 @@ def test_membership_capabilities_reads_join_filter_permissions():
     )
 
     assert membership_capabilities(member) == (True, False)
+
+
+def test_permission_diagnostic_includes_optional_group_capabilities():
+    member = SimpleNamespace(
+        status=ChatMemberStatus.ADMINISTRATOR,
+        can_post_messages=False,
+        can_invite_users=False,
+        can_restrict_members=False,
+        can_delete_messages=False,
+        can_pin_messages=True,
+        can_manage_topics=False,
+    )
+
+    permissions = membership_permissions(member, "supergroup")
+
+    assert permissions["can_post_messages"]
+    assert permissions["can_delete_messages"] is False
+    assert permission_issue_text(permissions, "supergroup") == (
+        "eliminar mensajes, invitar usuarios, restringir miembros"
+    )
 
 
 def test_normalize_chat_type_accepts_aiogram_enum_and_plain_string():

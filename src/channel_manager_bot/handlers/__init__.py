@@ -3,6 +3,7 @@ from aiogram import Dispatcher
 from . import (
     channel_texts,
     channels,
+    collaboration,
     common,
     content_plan,
     farewells,
@@ -22,6 +23,7 @@ def include_routers(dispatcher: Dispatcher) -> None:
     dispatcher.include_router(common.router)
     dispatcher.include_router(languages.router)
     dispatcher.include_router(members.router)
+    dispatcher.include_router(collaboration.router)
     dispatcher.include_router(channels.router)
     dispatcher.include_router(channel_texts.router)
     dispatcher.include_router(farewells.router)
