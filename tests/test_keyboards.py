@@ -8,6 +8,7 @@ from channel_manager_bot.keyboards import (
     chat_connection_keyboard,
     collaboration_menu,
     composer_menu,
+    editor_menu,
     farewell_buttons_menu,
     farewell_menu,
     feature_channels_menu,
@@ -303,6 +304,19 @@ def test_publication_and_template_menus_offer_button_management():
     assert f"pub:buttons:{item_id}" in publication_callbacks
     assert f"tpl:buttons:{item_id}" in template_callbacks
     assert f"tpl:preview:{item_id}" in template_callbacks
+
+
+def test_professional_editor_menu_exposes_draft_recovery_and_help():
+    callbacks = [
+        button.callback_data
+        for row in editor_menu().inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+
+    assert callbacks[:2] == ["editor:new", "editor:drafts"]
+    assert "editor:help" in callbacks
+    assert "home" in callbacks
 
 
 def test_recurrence_menus_offer_presets_custom_interval_and_start_choice():

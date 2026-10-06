@@ -5,7 +5,8 @@ from datetime import timedelta
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import aliased
 
 from ..models import Channel, ChannelStatus, JoinRequestEvent
 from ..repository import utcnow
@@ -20,6 +21,42 @@ PENDING_APPROVAL_OUTCOMES = {
     "pending_scheduled",
     "approval_retry",
 }
+# A JoinRequestEvent is created only after Telegram sends a real
+# ``chat_join_request`` update.  These outcomes mean that the request can
+# still be pending in Telegram, even when it is waiting for a forced-join
+# verification or a transient permission/API retry.  Keeping this set
+# separate from PENDING_APPROVAL_OUTCOMES prevents the Members screen from
+# confusing an approval queue with the number of actual pending requests.
+REAL_PENDING_REQUEST_OUTCOMES = PENDING_APPROVAL_OUTCOMES | {
+    "approval_processing",
+    "approval_failed",
+    "requirement_pending",
+    "membership_check_failed",
+    "requirement_message_failed",
+    "moderation_failed",
+}
+
+
+def latest_request_event_condition():
+    """Return a predicate that keeps only the latest event per requester.
+
+    A person can submit, cancel and submit again.  Every Telegram update is
+    retained for audit, but only the newest state represents what is pending
+    now.  The UUID tie-breaker handles two events created in the same tick.
+    """
+    newer = aliased(JoinRequestEvent)
+    newer_event = select(newer.id).where(
+        newer.channel_id == JoinRequestEvent.channel_id,
+        newer.user_id == JoinRequestEvent.user_id,
+        or_(
+            newer.created_at > JoinRequestEvent.created_at,
+            and_(
+                newer.created_at == JoinRequestEvent.created_at,
+                newer.id > JoinRequestEvent.id,
+            ),
+        ),
+    )
+    return ~newer_event.correlate(JoinRequestEvent).exists()
 
 
 @dataclass(frozen=True)
@@ -43,12 +80,17 @@ def next_scheduled_run(scheduled_for, now, interval_hours: int):
 async def pending_join_count(session, channel_id: int) -> int:
     return (
         await session.scalar(
-            select(func.count())
+            # Telegram can emit another join-request event when a person
+            # retries.  The Members badge represents people whose request is
+            # currently pending, so count distinct requesters rather than
+            # historical attempts/rows.
+            select(func.count(func.distinct(JoinRequestEvent.user_id)))
             .select_from(JoinRequestEvent)
             .where(
                 JoinRequestEvent.channel_id == channel_id,
                 JoinRequestEvent.approved.is_(False),
-                JoinRequestEvent.outcome.in_(PENDING_APPROVAL_OUTCOMES | {"approval_processing"}),
+                JoinRequestEvent.outcome.in_(REAL_PENDING_REQUEST_OUTCOMES),
+                latest_request_event_condition(),
             )
         )
         or 0
@@ -74,6 +116,7 @@ async def process_pending_join_requests(
                     JoinRequestEvent.channel_id == channel_id,
                     JoinRequestEvent.approved.is_(False),
                     JoinRequestEvent.outcome.in_(PENDING_APPROVAL_OUTCOMES),
+                    latest_request_event_condition(),
                     or_(
                         JoinRequestEvent.approval_claimed_at.is_(None),
                         JoinRequestEvent.approval_claimed_at < stale_claim,

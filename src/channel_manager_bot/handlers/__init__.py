@@ -6,6 +6,7 @@ from . import (
     collaboration,
     common,
     content_plan,
+    editor,
     farewells,
     feature_navigation,
     join_filters,
@@ -30,6 +31,7 @@ def include_routers(dispatcher: Dispatcher) -> None:
     dispatcher.include_router(feature_navigation.router)
     dispatcher.include_router(join_filters.router)
     dispatcher.include_router(relays.router)
+    dispatcher.include_router(editor.router)
     dispatcher.include_router(publications.router)
     dispatcher.include_router(templates.router)
     dispatcher.include_router(content_plan.router)

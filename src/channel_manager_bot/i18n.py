@@ -34,6 +34,7 @@ LANGUAGE_BY_CODE = {item.code: item for item in LANGUAGES}
 
 TRANSLATIONS = {
     "es": {
+        "editor": "Editor profesional",
         "create_post": "Crear publicación",
         "content_plan": "Plan de contenido",
         "templates": "Plantillas",
@@ -69,6 +70,7 @@ TRANSLATIONS = {
         ),
     },
     "en": {
+        "editor": "Professional editor",
         "create_post": "Create post",
         "content_plan": "Content plan",
         "templates": "Templates",
@@ -104,6 +106,7 @@ TRANSLATIONS = {
         ),
     },
     "pt": {
+        "editor": "Editor profissional",
         "create_post": "Criar publicação",
         "content_plan": "Plano de conteúdo",
         "templates": "Modelos",
@@ -138,6 +141,7 @@ TRANSLATIONS = {
         ),
     },
     "fr": {
+        "editor": "Éditeur professionnel",
         "create_post": "Créer une publication",
         "content_plan": "Plan de contenu",
         "templates": "Modèles",
@@ -172,6 +176,7 @@ TRANSLATIONS = {
         ),
     },
     "de": {
+        "editor": "Professioneller Editor",
         "create_post": "Beitrag erstellen",
         "content_plan": "Inhaltsplan",
         "templates": "Vorlagen",
@@ -206,6 +211,7 @@ TRANSLATIONS = {
         ),
     },
     "it": {
+        "editor": "Editor professionale",
         "create_post": "Crea pubblicazione",
         "content_plan": "Piano contenuti",
         "templates": "Modelli",
@@ -240,6 +246,7 @@ TRANSLATIONS = {
         ),
     },
     "ru": {
+        "editor": "Профессиональный редактор",
         "create_post": "Создать публикацию",
         "content_plan": "Контент-план",
         "templates": "Шаблоны",
@@ -274,6 +281,7 @@ TRANSLATIONS = {
         ),
     },
     "ar": {
+        "editor": "محرر احترافي",
         "create_post": "إنشاء منشور",
         "content_plan": "خطة المحتوى",
         "templates": "القوالب",
@@ -308,6 +316,7 @@ TRANSLATIONS = {
         ),
     },
     "hi": {
+        "editor": "पेशेवर संपादक",
         "create_post": "पोस्ट बनाएँ",
         "content_plan": "कंटेंट योजना",
         "templates": "टेम्पलेट",
@@ -342,6 +351,7 @@ TRANSLATIONS = {
         ),
     },
     "zh": {
+        "editor": "专业编辑器",
         "create_post": "创建帖子",
         "content_plan": "内容计划",
         "templates": "模板",
@@ -376,6 +386,7 @@ TRANSLATIONS = {
         ),
     },
     "ja": {
+        "editor": "プロフェッショナルエディター",
         "create_post": "投稿を作成",
         "content_plan": "コンテンツ計画",
         "templates": "テンプレート",
@@ -410,6 +421,7 @@ TRANSLATIONS = {
         ),
     },
     "ko": {
+        "editor": "전문 편집기",
         "create_post": "게시물 만들기",
         "content_plan": "콘텐츠 계획",
         "templates": "템플릿",

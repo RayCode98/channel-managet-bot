@@ -51,7 +51,10 @@ def chat_icon(channel: Channel) -> str:
 
 def main_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    # Keep the original quick action for existing users and deep links; the
+    # professional workspace is the next entry and adds the guided editor.
     builder.button(text=f"📝 {tr('create_post')}", callback_data="pub:new")
+    builder.button(text=f"🧰 {tr('editor')}", callback_data="editor:menu")
     builder.button(text=f"🗓 {tr('content_plan')}", callback_data="plan:page:0")
     builder.button(text=f"🧩 {tr('templates')}", callback_data="tpl:list")
     builder.button(text=f"👋 {tr('welcomes')}", callback_data="feature:channels:welcome")
@@ -72,6 +75,25 @@ def main_menu() -> InlineKeyboardMarkup:
     )
     builder.adjust(1, 2, 2, 2, 2, 2, 2, 2, 1)
     return builder.as_markup()
+
+
+def editor_menu() -> InlineKeyboardMarkup:
+    """Entry point for the guided publication workspace.
+
+    The old direct ``pub:new`` callback remains available for backwards
+    compatibility, while this menu gives users one place to create, review
+    and continue work on publications.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Nueva publicación", callback_data="editor:new")],
+            [InlineKeyboardButton(text="🗂 Borradores", callback_data="editor:drafts")],
+            [InlineKeyboardButton(text="🗓 Plan de contenido", callback_data="plan:page:0")],
+            [InlineKeyboardButton(text="🧩 Usar una plantilla", callback_data="tpl:list")],
+            [InlineKeyboardButton(text="ℹ️ Guía del editor", callback_data="editor:help")],
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
+        ]
+    )
 
 
 def back_home() -> InlineKeyboardMarkup:
@@ -569,7 +591,7 @@ def members_channels_menu(
                 text=(
                     f"{chat_icon(channel)} {channel.title} · "
                     f"{member_approval_label(channel)} · "
-                    f"{pending_by_channel.get(channel.telegram_chat_id, 0)} pendientes"
+                    f"{pending_by_channel.get(channel.telegram_chat_id, 0)} pendientes reales"
                 )[:64],
                 callback_data=f"members:chat:{channel.telegram_chat_id}",
             )
@@ -603,7 +625,7 @@ def member_settings_menu(channel: Channel, pending: int) -> InlineKeyboardMarkup
             ],
             [
                 InlineKeyboardButton(
-                    text=f"✅ Aprobar ahora (máx. 200) · {pending}",
+                    text=f"✅ Aprobar ahora (máx. 200) · {pending} pendientes reales",
                     callback_data=f"members:approve:{channel.telegram_chat_id}",
                 )
             ],
@@ -930,6 +952,16 @@ def composer_menu(
         [
             [
                 InlineKeyboardButton(
+                    text="✏️ Editar contenido", callback_data=f"pub:content:{short_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👁 Vista previa final", callback_data=f"pub:preview:{short_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text=f"🗑 Autoeliminación: {ttl_label(delete_after_minutes)}",
                     callback_data=f"pub:ttl:{short_id}",
                 )
@@ -937,6 +969,16 @@ def composer_menu(
             [
                 InlineKeyboardButton(
                     text="🎯 Elegir destinos", callback_data=f"pub:channels:{short_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⏰ Publicar o programar", callback_data=f"pub:time:{short_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📑 Duplicar borrador", callback_data=f"pub:duplicate:{short_id}"
                 )
             ],
             [InlineKeyboardButton(text="❌ Cancelar", callback_data=f"pub:cancel:{short_id}")],
@@ -1152,9 +1194,17 @@ def publication_buttons_menu(
     publication_id: uuid.UUID, buttons: list[PublicationButton]
 ) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=f"🗑 {button.text}"[:64], callback_data=f"pub:bdel:{button.id}")]
+        [
+            InlineKeyboardButton(
+                text=f"✏️ {button.text}"[:64], callback_data=f"pub:bedit:{button.id}"
+            ),
+            InlineKeyboardButton(text="🗑", callback_data=f"pub:bdel:{button.id}"),
+        ]
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
+    rows.append(
+        [InlineKeyboardButton(text="➕ Agregar otro botón", callback_data=f"pub:button:{publication_id}")]
+    )
     rows.append(
         [
             InlineKeyboardButton(

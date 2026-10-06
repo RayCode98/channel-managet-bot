@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.14.0
+
+- Agrega **Editor profesional** como entrada única para crear y continuar borradores desde Telegram.
+- Guarda cada publicación como borrador persistente y permite editar su contenido sin perder botones,
+  destinos ni autoeliminación.
+- Añade vista previa final por destino: aplica autocompletado, firma, botones automáticos y emojis
+  premium antes de mostrar el resultado al administrador.
+- Permite duplicar una publicación como borrador independiente para campañas similares.
+- Permite editar botones URL individualmente y agregar otro desde la pantalla de administración.
+- Corrige los contadores de **Miembros** para contar solicitudes pendientes reales una sola vez por
+  usuario, excluyendo reintentos y eventos ya resueltos.
+- Incluye el índice `20261005_0013_editor_profesional_solicitudes_reales` para instalaciones existentes.
+
 ## 0.13.0
 
 - Agrega conexión explícita con el selector nativo de Telegram para elegir un canal o grupo sin depender únicamente del evento `my_chat_member`.

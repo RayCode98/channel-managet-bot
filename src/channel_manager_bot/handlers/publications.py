@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,7 @@ from ..keyboards import (
     channel_selector,
     composer_menu,
     main_menu,
+    publication_markup,
     publication_buttons_menu,
     recurrence_interval_menu,
     recurrence_label,
@@ -33,7 +35,11 @@ from ..models import (
     PublicationStatus,
 )
 from ..repository import get_active_channels, get_workspace, utcnow
-from ..services.post_text import publication_content_type, publication_text_html
+from ..services.post_text import (
+    publication_content_type,
+    publication_text_html,
+    send_post_source_to_chat,
+)
 from ..services.rich_text import (
     custom_emoji_count,
     message_text_and_entities,
@@ -43,6 +49,38 @@ from ..services.rich_text import (
 from ..states import PublicationFlow
 
 router = Router(name="publications")
+
+
+def _has_supported_content(message: Message) -> bool:
+    return any(
+        [
+            message.text,
+            message.photo,
+            message.video,
+            message.animation,
+            message.audio,
+            message.document,
+            message.voice,
+        ]
+    )
+
+
+def _apply_message_content(publication: Publication, message: Message) -> int:
+    """Replace a draft snapshot with a new Telegram message.
+
+    Telegram message entities are copied before the original message is ever
+    sent to a destination, so the editor can safely preserve rich text and
+    custom emoji identifiers while a draft is being revised.
+    """
+    source_text_plain, source_entities = message_text_and_entities(message)
+    publication.source_chat_id = message.chat.id
+    publication.source_message_id = message.message_id
+    publication.source_content_type = publication_content_type(message)
+    publication.source_text_html = publication_text_html(message)
+    publication.source_text_plain = source_text_plain
+    publication.source_entities_json = serialize_entities(source_entities)
+    publication.preview = (message.text or message.caption or "Publicación multimedia")[:500]
+    return custom_emoji_count(source_entities)
 
 
 async def owned_publication(session, publication_id: str, user_id: int) -> Publication | None:
@@ -97,17 +135,7 @@ async def new_publication(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(PublicationFlow.waiting_content, F.chat.type == ChatType.PRIVATE)
 async def receive_content(message: Message, state: FSMContext) -> None:
-    if not any(
-        [
-            message.text,
-            message.photo,
-            message.video,
-            message.animation,
-            message.audio,
-            message.document,
-            message.voice,
-        ]
-    ):
+    if not _has_supported_content(message):
         await message.answer(
             "Ese tipo de contenido todavía no es compatible. Envíame texto o un archivo multimedia."
         )
@@ -141,6 +169,56 @@ async def receive_content(message: Message, state: FSMContext) -> None:
         "✅ Contenido guardado. Ahora puedes agregar botones o elegir los destinos."
         f"{premium_notice}",
         reply_markup=composer_menu(publication_id, 0),
+    )
+
+
+@router.callback_query(F.data.startswith("pub:content:"))
+async def edit_publication_content(callback: CallbackQuery, state: FSMContext) -> None:
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+    if publication is None or publication.status != PublicationStatus.draft:
+        await callback.answer("La publicación ya no se puede editar.", show_alert=True)
+        return
+    await state.set_state(PublicationFlow.waiting_content_edit)
+    await state.update_data(publication_id=publication_id)
+    await callback.message.answer(
+        "✏️ <b>Editar contenido</b>\n\n"
+        "Envíame el nuevo texto con formato o el archivo multimedia que sustituirá al "
+        "contenido actual. Los botones, destinos y demás opciones permanecerán intactos."
+    )
+    await callback.answer()
+
+
+@router.message(PublicationFlow.waiting_content_edit, F.chat.type == ChatType.PRIVATE)
+async def receive_edited_content(message: Message, state: FSMContext) -> None:
+    if not _has_supported_content(message):
+        await message.answer(
+            "Ese tipo de contenido todavía no es compatible. Envíame texto o un archivo multimedia."
+        )
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, data.get("publication_id", ""), message.from_user.id)
+        if publication is None or publication.status != PublicationStatus.draft:
+            await state.clear()
+            await message.answer("La publicación ya no se puede editar.", reply_markup=main_menu())
+            return
+        premium_count = _apply_message_content(publication, message)
+        await session.commit()
+        publication_id = publication.id
+        button_count = len(publication.buttons)
+        delete_after_minutes = publication.delete_after_minutes
+    await state.clear()
+    premium_notice = (
+        f"\n✨ Conservamos {premium_count} emoji premium en el borrador."
+        if premium_count
+        else ""
+    )
+    await message.answer(
+        "✅ Contenido actualizado. Los demás ajustes se conservaron."
+        f"{premium_notice}",
+        reply_markup=composer_menu(publication_id, button_count, delete_after_minutes),
     )
 
 
@@ -220,6 +298,57 @@ async def edit_publication(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("pub:preview:"))
+async def preview_publication(callback: CallbackQuery) -> None:
+    """Send the final rendered draft back to the editor privately.
+
+    When a destination is selected, its channel-level autocompletion, signature
+    and automatic buttons are applied to the preview.  This catches the most
+    common production mistake—previewing the source text while publishing a
+    different per-channel result—without creating a real delivery record.
+    """
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        publication = await owned_publication(session, publication_id, callback.from_user.id)
+        channel_id = (
+            await session.scalar(
+                select(PublicationChannel.channel_id)
+                .where(PublicationChannel.publication_id == publication.id)
+                .order_by(PublicationChannel.id)
+            )
+            if publication
+            else None
+        )
+        channel = await session.get(Channel, channel_id) if channel_id is not None else None
+    if publication is None:
+        await callback.answer("Publicación no encontrada.", show_alert=True)
+        return
+
+    try:
+        if channel is None:
+            # A draft can be previewed before destinations are selected.  In
+            # that case show exactly the source plus its own buttons.
+            await callback.bot.copy_message(
+                chat_id=callback.from_user.id,
+                from_chat_id=publication.source_chat_id,
+                message_id=publication.source_message_id,
+                reply_markup=publication_markup(publication.buttons),
+            )
+        else:
+            await send_post_source_to_chat(
+                callback.bot,
+                source=publication,
+                destination_chat_id=callback.from_user.id,
+                text_rules_channel=channel,
+                reply_markup=publication_markup(publication.buttons),
+            )
+    except TelegramAPIError:
+        await callback.answer("Telegram no pudo generar la vista previa.", show_alert=True)
+        return
+    label = escape(channel.title) if channel is not None else "contenido original"
+    await callback.answer(f"Vista previa enviada ({label})")
+
+
 @router.callback_query(F.data.startswith("pub:buttons:"))
 async def manage_publication_buttons(callback: CallbackQuery) -> None:
     publication_id = callback.data.rsplit(":", 1)[1]
@@ -237,6 +366,85 @@ async def manage_publication_buttons(callback: CallbackQuery) -> None:
         reply_markup=publication_buttons_menu(publication.id, publication.buttons),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pub:bedit:"))
+async def edit_publication_button(callback: CallbackQuery, state: FSMContext) -> None:
+    try:
+        button_id = uuid.UUID(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        button = await session.scalar(
+            select(PublicationButton)
+            .join(Publication, Publication.id == PublicationButton.publication_id)
+            .where(
+                PublicationButton.id == button_id,
+                Publication.workspace_id == workspace.id,
+                Publication.status == PublicationStatus.draft,
+            )
+        )
+    if button is None:
+        await callback.answer("Botón no encontrado.", show_alert=True)
+        return
+    await state.set_state(PublicationFlow.waiting_button_edit)
+    await state.update_data(button_id=str(button.id))
+    await callback.message.answer(
+        f"✏️ Editando <b>{escape(button.text)}</b>.\n\n"
+        "Envía una sola línea con el formato:\n"
+        "<code>Texto del botón - https://ejemplo.com</code>"
+    )
+    await callback.answer()
+
+
+@router.message(PublicationFlow.waiting_button_edit, F.text)
+async def receive_edited_publication_button(message: Message, state: FSMContext) -> None:
+    raw = message.text.strip()
+    if " - " not in raw:
+        await message.answer("Usa el formato <code>Texto del botón - https://ejemplo.com</code>.")
+        return
+    text, url = (part.strip() for part in raw.split(" - ", 1))
+    if not 1 <= len(text) <= 64:
+        await message.answer("El texto debe tener entre 1 y 64 caracteres.")
+        return
+    if not url.startswith(("https://", "http://", "tg://")):
+        await message.answer("El enlace debe comenzar por https://, http:// o tg://.")
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, message.from_user.id)
+        button = await session.scalar(
+            select(PublicationButton)
+            .join(Publication, Publication.id == PublicationButton.publication_id)
+            .where(
+                PublicationButton.id == uuid.UUID(data["button_id"]),
+                Publication.workspace_id == workspace.id,
+                Publication.status == PublicationStatus.draft,
+            )
+        )
+        if button is None:
+            await state.clear()
+            await message.answer("El botón ya no está disponible.", reply_markup=main_menu())
+            return
+        publication_id = button.publication_id
+        button.text = text
+        button.url = url
+        await session.commit()
+        publication = await owned_publication(session, str(publication_id), message.from_user.id)
+    await state.clear()
+    if publication is None:
+        await message.answer("La publicación ya no está disponible.", reply_markup=main_menu())
+        return
+    await message.answer(
+        "✅ Botón actualizado.",
+        reply_markup=composer_menu(
+            publication.id,
+            len(publication.buttons),
+            publication.delete_after_minutes,
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith("pub:bdel:"))
@@ -683,6 +891,63 @@ async def receive_recurrence_schedule(message: Message, state: FSMContext) -> No
         f"🔁 Repetición: <b>{recurrence_label(days)}</b>, hasta que la detengas.",
         reply_markup=main_menu(),
     )
+
+
+@router.callback_query(F.data.startswith("pub:duplicate:"))
+async def duplicate_publication(callback: CallbackQuery, state: FSMContext) -> None:
+    """Create an independent draft from any non-cancelled publication."""
+    publication_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        original = await owned_publication(session, publication_id, callback.from_user.id)
+        if original is None or original.status == PublicationStatus.cancelled:
+            await callback.answer("La publicación ya no se puede duplicar.", show_alert=True)
+            return
+        destinations = list(
+            await session.scalars(
+                select(PublicationChannel.channel_id).where(
+                    PublicationChannel.publication_id == original.id
+                )
+            )
+        )
+        duplicate = Publication(
+            workspace_id=original.workspace_id,
+            creator_user_id=callback.from_user.id,
+            source_chat_id=original.source_chat_id,
+            source_message_id=original.source_message_id,
+            source_content_type=original.source_content_type,
+            source_text_html=original.source_text_html,
+            source_text_plain=original.source_text_plain,
+            source_entities_json=original.source_entities_json,
+            preview=original.preview,
+            status=PublicationStatus.draft,
+            delete_after_minutes=original.delete_after_minutes,
+        )
+        session.add(duplicate)
+        await session.flush()
+        for button in original.buttons:
+            session.add(
+                PublicationButton(
+                    publication_id=duplicate.id,
+                    row_index=button.row_index,
+                    position=button.position,
+                    text=button.text,
+                    url=button.url,
+                )
+            )
+        for channel_id in destinations:
+            session.add(PublicationChannel(publication_id=duplicate.id, channel_id=channel_id))
+        await session.commit()
+        duplicate_id = duplicate.id
+        button_count = len(original.buttons)
+        delete_after_minutes = duplicate.delete_after_minutes
+    await state.clear()
+    await callback.message.edit_text(
+        "📑 <b>Borrador duplicado</b>\n\n"
+        "La copia es independiente: puedes cambiar el contenido, destinos, botones o "
+        "programación sin afectar la publicación original.",
+        reply_markup=composer_menu(duplicate_id, button_count, delete_after_minutes),
+    )
+    await callback.answer("Borrador creado")
 
 
 @router.callback_query(F.data.startswith("pub:cancel:"))

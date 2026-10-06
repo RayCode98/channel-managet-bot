@@ -44,6 +44,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
 - Publicaciones recurrentes cada 1 a 365 días, con inicio inmediato o programado.
+- **Editor profesional** con borradores persistentes, edición de contenido, vista previa final por canal y duplicación rápida.
+- Administración individual de botones: editar, eliminar y agregar otro sin reconstruir la publicación.
 - Recurrencia disponible al crear desde cero o al utilizar una plantilla.
 - Autoeliminación de publicaciones entre 1 hora y 7 días.
 - Reintentos persistentes cuando una eliminación falla temporalmente.
@@ -119,13 +121,27 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.12.1, sigue [`UPGRADE_V0.13.0.md`](UPGRADE_V0.13.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.13.0, sigue [`UPGRADE_V0.14.0.md`](UPGRADE_V0.14.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
 conectarlo, abre **Diagnóstico de permisos** para comprobar las capacidades del
 bot. La sección **Colaboración** crea enlaces de invitación de un solo uso y
 permite administrar roles y actividad sin compartir credenciales.
+
+## Editor profesional
+
+El botón **Editor profesional** concentra el ciclo completo de una publicación. Cada vez que
+se recibe el contenido se guarda un borrador en PostgreSQL; desde ese borrador se puede:
+
+- reemplazar el contenido conservando botones, destinos y autoeliminación;
+- agregar, editar o eliminar botones URL individualmente;
+- elegir uno, varios o todos los chats y revisar la vista previa final;
+- comprobar cómo afectan el autocompletado, la firma y los emojis premium del primer destino;
+- publicar ahora, programar una fecha, crear una recurrencia o duplicar el borrador para una nueva campaña.
+
+La vista previa final no crea una entrega ni activa el reenvío: solamente envía una copia privada al
+administrador. Si no se eligió un destino todavía, muestra el contenido original con sus botones.
 
 ## Emojis premium
 
@@ -203,6 +219,11 @@ El sistema registra cada entrega por mensaje y destino para no repetirla. Tampoc
 ## Miembros e idiomas
 
 **Miembros** reemplaza a la antigua sección **Automatizaciones**. El flujo es **Miembros → canal o grupo → modo**. Cada chat puede dejar solicitudes para revisión manual, aprobarlas al recibirlas o procesar hasta 200 solicitudes conocidas cada 1, 6, 12, 24 o 48 horas. También existe **Aprobar ahora** para ejecutar un lote sin cambiar el modo configurado.
+
+El contador muestra **solicitudes reales pendientes**: cuenta una sola vez a cada usuario con una
+solicitud todavía activa y excluye intentos repetidos, solicitudes ya aprobadas/rechazadas y eventos
+que Telegram dejó sin disponibilidad. Las solicitudes que esperan la verificación de unión obligatoria
+siguen siendo visibles hasta que se resuelven.
 
 El bot solamente puede procesar solicitudes que Telegram le haya entregado mientras conserva el permiso **Invitar usuarios**. Los filtros de escritura y la unión obligatoria se evalúan primero.
 

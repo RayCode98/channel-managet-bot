@@ -190,7 +190,7 @@ async def decide_join(callback: CallbackQuery, bot: Bot) -> None:
                         JoinRequestEvent.channel_id == chat_id,
                         JoinRequestEvent.user_id == user_id,
                     )
-                    .order_by(JoinRequestEvent.created_at.desc())
+                    .order_by(JoinRequestEvent.created_at.desc(), JoinRequestEvent.id.desc())
                 )
                 if event:
                     event.approved = True
@@ -206,7 +206,7 @@ async def decide_join(callback: CallbackQuery, bot: Bot) -> None:
                         JoinRequestEvent.channel_id == chat_id,
                         JoinRequestEvent.user_id == user_id,
                     )
-                    .order_by(JoinRequestEvent.created_at.desc())
+                    .order_by(JoinRequestEvent.created_at.desc(), JoinRequestEvent.id.desc())
                 )
                 if event:
                     event.outcome = "declined_manual"
@@ -270,7 +270,7 @@ async def verify_required_membership(callback: CallbackQuery, bot: Bot) -> None:
                 JoinRequestEvent.channel_id == channel_id,
                 JoinRequestEvent.user_id == user_id,
             )
-            .order_by(JoinRequestEvent.created_at.desc())
+            .order_by(JoinRequestEvent.created_at.desc(), JoinRequestEvent.id.desc())
         )
         if event:
             event.approved = True

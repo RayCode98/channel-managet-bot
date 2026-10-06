@@ -17,7 +17,8 @@ from ..models import AuditLog, Channel, JoinRequestEvent
 from ..repository import get_active_channels, get_workspace, utcnow
 from ..services.member_approvals import (
     APPROVAL_INTERVALS,
-    PENDING_APPROVAL_OUTCOMES,
+    REAL_PENDING_REQUEST_OUTCOMES,
+    latest_request_event_condition,
     pending_join_count,
     process_pending_join_requests,
 )
@@ -36,15 +37,14 @@ async def render_member_channels(callback: CallbackQuery) -> None:
                     await session.execute(
                         select(
                             JoinRequestEvent.channel_id,
-                            func.count(JoinRequestEvent.id),
+                            func.count(func.distinct(JoinRequestEvent.user_id)),
                         )
                         .join(Channel, Channel.telegram_chat_id == JoinRequestEvent.channel_id)
                         .where(
                             Channel.workspace_id == workspace.id,
                             JoinRequestEvent.approved.is_(False),
-                            JoinRequestEvent.outcome.in_(
-                                PENDING_APPROVAL_OUTCOMES | {"approval_processing"}
-                            ),
+                            JoinRequestEvent.outcome.in_(REAL_PENDING_REQUEST_OUTCOMES),
+                            latest_request_event_condition(),
                         )
                         .group_by(JoinRequestEvent.channel_id)
                     )
@@ -82,7 +82,7 @@ async def render_member_settings(callback: CallbackQuery, channel_id: int) -> No
     text = (
         f"👥 <b>Miembros · {escape(channel.title)}</b>\n\n"
         f"Modo: <b>{member_approval_label(channel)}</b>\n"
-        f"Pendientes conocidos: <b>{pending}</b>\n"
+        f"Solicitudes reales pendientes: <b>{pending}</b>\n"
         f"Próxima ejecución: <b>{next_run}</b>\n"
         f"Permiso: <b>{permission}</b>\n\n"
         "• <b>Inmediato:</b> acepta cada solicitud nueva al recibirla.\n"
