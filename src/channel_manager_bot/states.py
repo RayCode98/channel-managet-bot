@@ -40,3 +40,9 @@ class TemplateFlow(StatesGroup):
 
 class ChannelConnectionFlow(StatesGroup):
     waiting_chat_share = State()
+
+
+class CampaignLinkFlow(StatesGroup):
+    waiting_name = State()
+    waiting_target_url = State()
+    waiting_channel = State()

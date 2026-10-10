@@ -1,6 +1,7 @@
 from aiogram import Dispatcher
 
 from . import (
+    campaigns,
     channel_texts,
     channels,
     collaboration,
@@ -22,6 +23,7 @@ from . import (
 
 def include_routers(dispatcher: Dispatcher) -> None:
     dispatcher.include_router(common.router)
+    dispatcher.include_router(campaigns.router)
     dispatcher.include_router(languages.router)
     dispatcher.include_router(members.router)
     dispatcher.include_router(collaboration.router)

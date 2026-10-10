@@ -96,6 +96,122 @@ def editor_menu() -> InlineKeyboardMarkup:
     )
 
 
+def stats_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📊 Resumen de crecimiento",
+                    callback_data="stats:period",
+                )
+            ],
+            [InlineKeyboardButton(text="📈 Crecimiento por chat", callback_data="stats:growth")],
+            [
+                InlineKeyboardButton(
+                    text="📝 Rendimiento de publicaciones",
+                    callback_data="stats:publications",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🙋 Miembros y solicitudes",
+                    callback_data="stats:members",
+                )
+            ],
+            [InlineKeyboardButton(text="🔗 Enlaces de campaña", callback_data="campaign:list")],
+            [InlineKeyboardButton(text="📄 Generar reporte", callback_data="stats:report")],
+            [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
+        ]
+    )
+
+
+def stats_period_menu(back_callback: str = "stats:show") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Últimos 7 días", callback_data="stats:overview:7")],
+            [InlineKeyboardButton(text="Últimos 30 días", callback_data="stats:overview:30")],
+            [InlineKeyboardButton(text="Últimos 90 días", callback_data="stats:overview:90")],
+            [InlineKeyboardButton(text="⬅️ Estadísticas", callback_data=back_callback)],
+        ]
+    )
+
+
+def growth_channels_menu(channels, days: int = 30) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"📈 {channel.title}"[:64],
+                callback_data=f"stats:channel:{channel.telegram_chat_id}:{days}",
+            )
+        ]
+        for channel in channels
+    ]
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="7 días", callback_data="stats:growth:7")],
+            [InlineKeyboardButton(text="30 días", callback_data="stats:growth:30")],
+            [InlineKeyboardButton(text="90 días", callback_data="stats:growth:90")],
+            [InlineKeyboardButton(text="⬅️ Estadísticas", callback_data="stats:show")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def campaign_links_menu(links) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if enabled else '❌'} {name} · {clicks} clics"[:64],
+                callback_data=f"campaign:open:{token}",
+            )
+        ]
+        for token, name, enabled, clicks in links
+    ]
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="➕ Crear enlace", callback_data="campaign:new")],
+            [InlineKeyboardButton(text="⬅️ Estadísticas", callback_data="stats:show")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def campaign_channels_menu(channels) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{chat_icon(channel)} {channel.title}"[:64],
+                callback_data=f"campaign:channel:{channel.telegram_chat_id}",
+            )
+        ]
+        for channel in channels
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ Enlaces de campaña", callback_data="campaign:list")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def campaign_link_detail_menu(token: str, enabled: bool) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"Enlace: {'✅ Activo' if enabled else '❌ Desactivado'}",
+                    callback_data=f"campaign:toggle:{token}",
+                )
+            ],
+            [InlineKeyboardButton(text="🗑 Eliminar", callback_data=f"campaign:delete:{token}")],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Enlaces de campaña",
+                    callback_data="campaign:list",
+                )
+            ],
+        ]
+    )
+
+
 def back_home() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")]]

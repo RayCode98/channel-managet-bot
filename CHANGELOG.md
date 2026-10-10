@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.15.0
+
+- Agrega el panel **Crecimiento y estadísticas** dentro del menú principal, completamente operable desde Telegram.
+- Guarda capturas históricas de miembros por chat durante cada sincronización periódica o manual.
+- Muestra resumen configurable de 7, 30 o 90 días con comunidad actual, variación estimada, entregas, tasa de éxito, solicitudes reales, aprobaciones y reenvíos.
+- Añade crecimiento individual por canal, grupo o supergrupo con las últimas capturas locales.
+- Añade métricas de publicaciones: entregas correctas/fallidas, publicaciones con entrega, publicaciones con más entregas y horas con mayor actividad.
+- Añade conteo de solicitudes reales únicas por chat, aprobaciones y pendientes actuales sin inflar reintentos.
+- Añade reportes de 30 días enviados directamente al administrador desde Telegram.
+- Añade enlaces profundos de campaña con visitas totales, personas únicas, activación/desactivación y eliminación.
+- Aísla todas las métricas y enlaces por espacio de trabajo.
+- Incluye migración incremental `20261007_0014_growth_statistics`, compatible con instalaciones anteriores.
+
 ## 0.14.0
 
 - Agrega **Editor profesional** como entrada única para crear y continuar borradores desde Telegram.

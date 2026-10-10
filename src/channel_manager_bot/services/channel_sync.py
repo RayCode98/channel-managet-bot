@@ -9,7 +9,7 @@ from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 from sqlalchemy import select
 
-from ..models import Channel, ChannelStatus
+from ..models import Channel, ChannelMetricSnapshot, ChannelStatus
 from ..repository import utcnow
 
 logger = logging.getLogger(__name__)
@@ -251,6 +251,15 @@ async def refresh_channels(
                     previous_issue = channel.permission_issue
                     previous_status = channel.status
                     apply_channel_snapshot(channel, snapshot)
+                    if snapshot.member_count is not None:
+                        session.add(
+                            ChannelMetricSnapshot(
+                                channel_id=channel.telegram_chat_id,
+                                member_count=snapshot.member_count,
+                                captured_at=utcnow(),
+                                source="sync",
+                            )
+                        )
                     issue_changed = snapshot.permission_issue != previous_issue
                     status_changed = snapshot.status != previous_status
                     meaningful_change = status_changed or (

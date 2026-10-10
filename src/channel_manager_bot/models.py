@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -176,6 +177,28 @@ class Channel(Base):
     join_requirement: Mapped["JoinRequirement | None"] = relationship(
         cascade="all, delete-orphan", lazy="selectin", uselist=False
     )
+
+
+class ChannelMetricSnapshot(Base):
+    """Historical member-count sample used by the growth dashboard."""
+
+    __tablename__ = "channel_metric_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_channel_metric_snapshots_channel_captured",
+            "channel_id",
+            "captured_at",
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    member_count: Mapped[int] = mapped_column(Integer)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    source: Mapped[str] = mapped_column(String(16), default="sync")
 
 
 class WelcomeButton(Base):
@@ -453,6 +476,40 @@ class JoinRequestEvent(Base):
     approval_error: Mapped[str | None] = mapped_column(Text)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CampaignLink(Base):
+    """Trackable Telegram deep link that leads to a configured destination."""
+
+    __tablename__ = "campaign_links"
+    token: Mapped[str] = mapped_column(String(48), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    channel_id: Mapped[int] = mapped_column(
+        ForeignKey("channels.telegram_chat_id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    target_url: Mapped[str] = mapped_column(String(2048))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CampaignClick(Base):
+    __tablename__ = "campaign_clicks"
+    __table_args__ = (
+        Index("ix_campaign_clicks_link_clicked", "campaign_link_token", "clicked_at"),
+        Index("ix_campaign_clicks_link_user", "campaign_link_token", "user_id"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_link_token: Mapped[str] = mapped_column(
+        ForeignKey("campaign_links.token", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    clicked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
 
 
 class AuditLog(Base):

@@ -45,6 +45,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
 - Publicaciones recurrentes cada 1 a 365 días, con inicio inmediato o programado.
 - **Editor profesional** con borradores persistentes, edición de contenido, vista previa final por canal y duplicación rápida.
+- **Crecimiento y estadísticas** con historial de miembros, rendimiento de publicaciones, solicitudes, reenvíos y reportes desde Telegram.
+- Enlaces de campaña con métricas de visitas totales y personas únicas mediante enlaces profundos del bot.
 - Administración individual de botones: editar, eliminar y agregar otro sin reconstruir la publicación.
 - Recurrencia disponible al crear desde cero o al utilizar una plantilla.
 - Autoeliminación de publicaciones entre 1 hora y 7 días.
@@ -121,7 +123,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.13.0, sigue [`UPGRADE_V0.14.0.md`](UPGRADE_V0.14.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.14.0, sigue [`UPGRADE_V0.15.0.md`](UPGRADE_V0.15.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
@@ -187,6 +189,28 @@ El worker sincroniza todos los canales y grupos al iniciar y después cada seis 
 Las personalizaciones se administran desde botones independientes del menú principal. El flujo es **función → canal o grupo → opciones**, por ejemplo: **Bienvenidas → Comunidad → Configurar bienvenida**. La sección **Canales y grupos** queda reservada para información general, conexión y sincronización.
 
 Consulta [`NAVEGACION_Y_SINCRONIZACION.md`](NAVEGACION_Y_SINCRONIZACION.md) para ver el flujo completo.
+
+## Crecimiento y estadísticas
+
+Desde **📊 Estadísticas** se consulta todo el espacio de trabajo sin salir de Telegram:
+
+- **Resumen:** comunidad actual, variación del periodo elegido (7, 30 o 90 días), entregas, tasa de éxito, solicitudes reales, aprobaciones y reenvíos.
+- **Crecimiento por chat:** evolución individual de cada canal, grupo o supergrupo y sus últimas capturas de miembros.
+- **Rendimiento de publicaciones:** entregas correctas/fallidas, publicaciones con entregas, publicaciones con más entregas y horas locales con más actividad.
+- **Miembros y solicitudes:** solicitudes reales recibidas, aprobadas y pendientes actuales. Los reintentos no inflan el pendiente y cada persona se cuenta una vez por chat.
+- **Reporte:** envía al administrador un resumen de 30 días y las publicaciones con más entregas.
+
+El worker guarda una captura de miembros cada vez que sincroniza un chat. Por defecto la sincronización
+ocurre al iniciar y cada seis horas (`CHANNEL_REFRESH_HOURS`), por lo que la comparación histórica
+empieza a ser más precisa después de acumular varias capturas. La migración no inventa datos anteriores.
+
+En **Enlaces de campaña** se pueden crear enlaces profundos como `https://t.me/TU_BOT?start=trk_TOKEN`.
+Cada apertura registra la campaña, muestra las visitas totales y las personas únicas, y ofrece un botón
+para abrir el destino configurado. Telegram no permite medir directamente un clic sobre una URL externa
+si el usuario nunca abre el bot; para medir una campaña usa el enlace generado por esta sección.
+
+Las métricas están aisladas por espacio de trabajo y los enlaces solo pueden administrarlos sus miembros.
+Desactivar un enlace detiene el registro y eliminarlo borra sus visitas asociadas.
 
 ## Filtros de unión
 
@@ -257,14 +281,12 @@ src/channel_manager_bot/
 
 ## Próxima fase recomendada
 
-1. Invitaciones para agregar colaboradores y cambiar roles.
-2. Planes, límites y renovaciones por cliente.
-3. Campañas con enlaces de invitación nombrados y estadísticas por enlace.
-4. Duplicación rápida de publicaciones y papelera recuperable.
-5. Edición/eliminación sincronizada de mensajes ya publicados.
-6. Botones en varias columnas desde el asistente.
-7. Exportación CSV y respaldo programado.
-8. Webhook con proxy HTTPS cuando el volumen lo justifique.
+1. Planes, límites y renovaciones por cliente.
+2. Exportación CSV y respaldo programado de reportes.
+3. Duplicación rápida de publicaciones y papelera recuperable.
+4. Edición/eliminación sincronizada de mensajes ya publicados.
+5. Botones en varias columnas desde el asistente.
+6. Webhook con proxy HTTPS cuando el volumen lo justifique.
 
 ## Desarrollo local
 

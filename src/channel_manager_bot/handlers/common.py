@@ -5,7 +5,13 @@ from aiogram import Bot, F, Router
 from aiogram.enums import ChatType
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, ErrorEvent, Message
+from aiogram.types import (
+    CallbackQuery,
+    ErrorEvent,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from redis.asyncio import Redis
 from sqlalchemy import text
 
@@ -14,6 +20,7 @@ from ..database import SessionFactory
 from ..i18n import tr
 from ..keyboards import main_menu
 from ..repository import accept_workspace_invite, ensure_user_workspace
+from ..services.campaigns import record_campaign_click
 
 router = Router(name="common")
 logger = logging.getLogger(__name__)
@@ -27,6 +34,7 @@ async def start(
 ) -> None:
     await state.clear()
     invite_notice = None
+    campaign_click = None
     async with SessionFactory() as session:
         if command.args and command.args.startswith("ws_"):
             _, status = await accept_workspace_invite(
@@ -41,8 +49,28 @@ async def start(
                 "invalid": "⚠️ La invitación no es válida; abrí tu espacio de trabajo habitual.",
             }.get(status)
         workspace = await ensure_user_workspace(session, message.from_user)
+    if command.args and command.args.startswith("trk_"):
+        campaign_click = await record_campaign_click(
+            command.args.removeprefix("trk_")[:48],
+            message.from_user.id,
+        )
     if invite_notice:
         await message.answer(invite_notice)
+    if campaign_click:
+        await message.answer(
+            "🎯 <b>Visita registrada</b>\n\n"
+            f"Campaña: <b>{escape(campaign_click.name)}</b>",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Abrir destino",
+                            url=campaign_click.target_url,
+                        )
+                    ]
+                ]
+            ),
+        )
     await message.answer(
         tr("start", workspace=escape(workspace.name)),
         reply_markup=main_menu(),

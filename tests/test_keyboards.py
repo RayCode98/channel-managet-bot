@@ -24,12 +24,16 @@ from channel_manager_bot.keyboards import (
     relay_rule_menu,
     relay_sources_menu,
     relay_targets_menu,
+    campaign_link_detail_menu,
+    campaign_links_menu,
     template_detail_menu,
     timing_menu,
     ttl_label,
     ttl_menu,
     welcome_buttons_menu,
     welcome_menu,
+    stats_menu,
+    stats_period_menu,
 )
 from channel_manager_bot.models import (
     AutocompleteButton,
@@ -317,6 +321,39 @@ def test_professional_editor_menu_exposes_draft_recovery_and_help():
     assert callbacks[:2] == ["editor:new", "editor:drafts"]
     assert "editor:help" in callbacks
     assert "home" in callbacks
+
+
+def test_growth_statistics_menus_expose_periods_campaigns_and_controls():
+    stats_callbacks = [
+        button.callback_data
+        for row in stats_menu().inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    period_callbacks = [
+        button.callback_data
+        for row in stats_period_menu().inline_keyboard
+        for button in row
+    ]
+    links_callbacks = [
+        button.callback_data
+        for row in campaign_links_menu([("abc", "Instagram", True, 4)]).inline_keyboard
+        for button in row
+    ]
+    detail_callbacks = [
+        button.callback_data
+        for row in campaign_link_detail_menu("abc", True).inline_keyboard
+        for button in row
+    ]
+
+    assert "stats:growth" in stats_callbacks
+    assert "stats:publications" in stats_callbacks
+    assert "stats:members" in stats_callbacks
+    assert "campaign:list" in stats_callbacks
+    assert "stats:overview:30" in period_callbacks
+    assert "campaign:open:abc" in links_callbacks
+    assert "campaign:toggle:abc" in detail_callbacks
+    assert "campaign:delete:abc" in detail_callbacks
 
 
 def test_recurrence_menus_offer_presets_custom_interval_and_start_choice():
