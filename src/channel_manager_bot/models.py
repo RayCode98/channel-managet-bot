@@ -237,6 +237,7 @@ class AutocompleteButton(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     text: Mapped[str] = mapped_column(String(64))
     url: Mapped[str] = mapped_column(String(2048))
+    style: Mapped[str | None] = mapped_column(String(16))
 
 
 class JoinNameScript(Base):
@@ -389,6 +390,7 @@ class PublicationButton(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     text: Mapped[str] = mapped_column(String(64))
     url: Mapped[str] = mapped_column(String(2048))
+    style: Mapped[str | None] = mapped_column(String(16))
 
 
 class PublicationChannel(Base):
@@ -458,6 +460,7 @@ class TemplateButton(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     text: Mapped[str] = mapped_column(String(64))
     url: Mapped[str] = mapped_column(String(2048))
+    style: Mapped[str | None] = mapped_column(String(16))
 
 
 class JoinRequestEvent(Base):

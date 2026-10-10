@@ -83,6 +83,7 @@ async def create_next_recurrence(
                 position=button.position,
                 text=button.text,
                 url=button.url,
+                style=getattr(button, "style", None),
             )
         )
     for channel_id in channel_ids:

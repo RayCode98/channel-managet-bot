@@ -21,6 +21,7 @@ from ..services.rich_text import (
     serialize_entities,
     stored_custom_emoji_count,
 )
+from ..services.welcome import parse_button_color
 from ..states import ChannelPostTextFlow
 
 router = Router(name="channel_texts")
@@ -225,6 +226,20 @@ async def receive_autocomplete_button_url(message: Message, state: FSMContext) -
             "El enlace debe comenzar con https://, http:// o tg:// y no superar 2048 caracteres."
         )
         return
+    await state.update_data(button_url=url)
+    await state.set_state(ChannelPostTextFlow.waiting_button_color)
+    await message.answer(
+        "Elige el color del botón: <b>azul</b>, <b>verde</b>, <b>rojo</b> o <b>normal</b>."
+    )
+
+
+@router.message(ChannelPostTextFlow.waiting_button_color, F.chat.type == ChatType.PRIVATE, F.text)
+async def receive_autocomplete_button_color(message: Message, state: FSMContext) -> None:
+    try:
+        style = parse_button_color(message.text)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
     data = await state.get_data()
     async with SessionFactory() as session:
         channel = await owned_channel(session, int(data["channel_id"]), message.from_user.id)
@@ -249,7 +264,8 @@ async def receive_autocomplete_button_url(message: Message, state: FSMContext) -
                 row_index=count or 0,
                 position=0,
                 text=data["button_text"],
-                url=url,
+                url=data["button_url"],
+                style=style,
             )
         )
         await session.commit()

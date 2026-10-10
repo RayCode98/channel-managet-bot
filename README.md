@@ -14,7 +14,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Sincronización opcional de los administradores de cada canal o grupo y registro de actividad.
 - Publicaciones de texto enriquecido, foto, video, animación, audio, voz o documento.
 - Conservación del formato y de los emojis premium mediante copia nativa y entidades `custom_emoji`.
-- Hasta 20 botones URL por publicación.
+- Hasta 20 botones URL por publicación, con estilos azul, verde, rojo o normal.
 - Selección de uno, varios o todos los canales y grupos conectados.
 - Envío inmediato o programación con zona horaria del cliente.
 - Cola persistente con bloqueo transaccional y recuperación tras reinicios.
@@ -39,7 +39,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Protección contra reenvíos duplicados y ciclos entre chats.
 - Menús independientes de Bienvenidas, Despedidas, Autocompletado, Firmas y Filtros de unión.
 - Plan de contenido paginado y agrupado por fecha.
-- Plantillas reutilizables con contenido, botones y autoeliminación.
+- Plantillas reutilizables con contenido, botones con color y autoeliminación.
 - Vista previa exacta de plantillas antes de utilizarlas.
 - Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
@@ -123,7 +123,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.14.0, sigue [`UPGRADE_V0.15.0.md`](UPGRADE_V0.15.0.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.0, sigue [`UPGRADE_V0.15.1.md`](UPGRADE_V0.15.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
@@ -137,13 +137,22 @@ El botón **Editor profesional** concentra el ciclo completo de una publicación
 se recibe el contenido se guarda un borrador en PostgreSQL; desde ese borrador se puede:
 
 - reemplazar el contenido conservando botones, destinos y autoeliminación;
-- agregar, editar o eliminar botones URL individualmente;
+- agregar, editar o eliminar botones URL individualmente y elegir su color;
 - elegir uno, varios o todos los chats y revisar la vista previa final;
 - comprobar cómo afectan el autocompletado, la firma y los emojis premium del primer destino;
 - publicar ahora, programar una fecha, crear una recurrencia o duplicar el borrador para una nueva campaña.
 
 La vista previa final no crea una entrega ni activa el reenvío: solamente envía una copia privada al
 administrador. Si no se eligió un destino todavía, muestra el contenido original con sus botones.
+
+## Botones con color
+
+Las publicaciones, plantillas y botones de autocompletado usan el mismo selector de color que las
+bienvenidas y despedidas. Después de escribir el texto y la URL, el bot solicita `azul`, `verde`,
+`rojo` o `normal`; Telegram renderiza esos estilos como `primary`, `success`, `danger` o el botón
+predeterminado. La vista previa, las publicaciones recurrentes, las plantillas utilizadas y los
+reenvíos conservan el estilo elegido. Los botones creados antes de v0.15.1 conservan el color normal
+porque su estilo queda guardado como `NULL`.
 
 ## Emojis premium
 
@@ -173,7 +182,7 @@ El bot reacciona únicamente cuando Telegram informa que la propia persona aband
 
 Ambas funciones tienen su propio botón en el menú principal. Después se elige el canal y se configura el texto enriquecido de Telegram:
 
-- **Autocompletado:** solamente se utiliza cuando la publicación no tiene texto o descripción. Si ya existe una descripción, no la modifica. Puede incluir hasta 20 botones URL propios por canal o grupo.
+- **Autocompletado:** solamente se utiliza cuando la publicación no tiene texto o descripción. Si ya existe una descripción, no la modifica. Puede incluir hasta 20 botones URL propios por canal o grupo y cada uno puede usar azul, verde, rojo o normal.
 - **Firma:** siempre se agrega al final. Si existe una descripción, se separa de ella con una línea en blanco.
 
 Cuando están activas las dos funciones y el contenido no tiene descripción, el resultado es `autocompletado + firma`. Los botones automáticos aparecen debajo de los botones propios del post o plantilla y solamente se agregan cuando entra en vigor el autocompletado. Cada texto admite hasta 500 unidades de texto de Telegram. La configuración se evalúa al momento de publicar, por lo que cada canal puede producir una versión distinta del mismo contenido.

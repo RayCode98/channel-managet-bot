@@ -84,7 +84,13 @@ def append_autocomplete_buttons(
     """Append channel autocomplete URL buttons below publication buttons."""
     rows = [list(row) for row in reply_markup.inline_keyboard] if reply_markup else []
     rows.extend(
-        [InlineKeyboardButton(text=button.text, url=button.url)]
+        [
+            InlineKeyboardButton(
+                text=button.text,
+                url=button.url,
+                style=getattr(button, "style", None),
+            )
+        ]
         for button in sorted(buttons or [], key=lambda item: (item.row_index, item.position))
     )
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None

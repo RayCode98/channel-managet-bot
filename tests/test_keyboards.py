@@ -46,11 +46,12 @@ from channel_manager_bot.models import (
 
 
 class Button:
-    def __init__(self, text, url, row_index, position):
+    def __init__(self, text, url, row_index, position, style=None):
         self.text = text
         self.url = url
         self.row_index = row_index
         self.position = position
+        self.style = style
 
 
 def test_publication_markup_groups_and_orders_rows():
@@ -68,6 +69,14 @@ def test_publication_markup_groups_and_orders_rows():
 
 def test_publication_markup_is_none_without_buttons():
     assert publication_markup([]) is None
+
+
+def test_publication_markup_preserves_button_style():
+    markup = publication_markup(
+        [Button("Oferta", "https://example.com", 0, 0, style="danger")]
+    )
+
+    assert markup.inline_keyboard[0][0].style == "danger"
 
 
 def test_ttl_labels_and_callbacks():

@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 0.15.1
+
+- Añade colores a los botones URL de publicaciones, plantillas y autocompletado: `azul`, `verde`, `rojo` y `normal`.
+- Solicita el color al crear un botón desde Telegram y permite cambiarlo al editar un botón de publicación.
+- Conserva el estilo en vistas previas, publicaciones recurrentes, publicaciones creadas desde plantillas y reenvíos.
+- Mantiene los botones de versiones anteriores en el estilo normal mediante columnas `NULL` compatibles.
+- Incluye la migración incremental `20261010_0015_button_colors`.
+
 ## 0.15.0
 
 - Agrega el panel **Crecimiento y estadísticas** dentro del menú principal, completamente operable desde Telegram.

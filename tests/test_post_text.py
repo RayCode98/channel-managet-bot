@@ -134,6 +134,7 @@ async def test_autocomplete_buttons_are_appended_below_publication_buttons():
     automatic_button = SimpleNamespace(
         text="Botón automático",
         url="https://example.com/automatic",
+        style="success",
         row_index=0,
         position=0,
     )
@@ -150,6 +151,7 @@ async def test_autocomplete_buttons_are_appended_below_publication_buttons():
         ["Botón del post"],
         ["Botón automático"],
     ]
+    assert markup.inline_keyboard[1][0].style == "success"
     assert delivery.reply_markup == markup
 
 

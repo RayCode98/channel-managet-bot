@@ -46,6 +46,7 @@ from ..services.rich_text import (
     serialize_entities,
     stored_custom_emoji_count,
 )
+from ..services.welcome import parse_button_color, parse_button_spec
 from ..states import PublicationFlow
 
 router = Router(name="publications")
@@ -250,8 +251,24 @@ async def receive_button_text(message: Message, state: FSMContext) -> None:
 @router.message(PublicationFlow.waiting_button_url, F.text)
 async def receive_button_url(message: Message, state: FSMContext) -> None:
     url = message.text.strip()
-    if not (url.startswith(("https://", "http://", "tg://"))):
-        await message.answer("El enlace debe comenzar con https://, http:// o tg://")
+    if not url.startswith(("https://", "http://", "tg://")) or len(url) > 2048:
+        await message.answer(
+            "El enlace debe comenzar con https://, http:// o tg:// y no superar 2048 caracteres."
+        )
+        return
+    await state.update_data(button_url=url)
+    await state.set_state(PublicationFlow.waiting_button_color)
+    await message.answer(
+        "Elige el color del botón: <b>azul</b>, <b>verde</b>, <b>rojo</b> o <b>normal</b>."
+    )
+
+
+@router.message(PublicationFlow.waiting_button_color, F.text)
+async def receive_button_color(message: Message, state: FSMContext) -> None:
+    try:
+        style = parse_button_color(message.text)
+    except ValueError as exc:
+        await message.answer(str(exc))
         return
     data = await state.get_data()
     async with SessionFactory() as session:
@@ -266,6 +283,7 @@ async def receive_button_url(message: Message, state: FSMContext) -> None:
             .where(PublicationButton.publication_id == publication.id)
         )
         if (count or 0) >= 20:
+            await state.clear()
             await message.answer("Esta versión permite hasta 20 botones.")
             return
         session.add(
@@ -274,7 +292,8 @@ async def receive_button_url(message: Message, state: FSMContext) -> None:
                 row_index=count or 0,
                 position=0,
                 text=data["button_text"],
-                url=url,
+                url=data["button_url"],
+                style=style,
             )
         )
         await session.commit()
@@ -394,7 +413,8 @@ async def edit_publication_button(callback: CallbackQuery, state: FSMContext) ->
     await callback.message.answer(
         f"✏️ Editando <b>{escape(button.text)}</b>.\n\n"
         "Envía una sola línea con el formato:\n"
-        "<code>Texto del botón - https://ejemplo.com</code>"
+        "<code>Texto del botón - https://ejemplo.com - azul</code>\n"
+        "También se acepta el formato anterior de dos partes; quedará en color normal."
     )
     await callback.answer()
 
@@ -402,15 +422,10 @@ async def edit_publication_button(callback: CallbackQuery, state: FSMContext) ->
 @router.message(PublicationFlow.waiting_button_edit, F.text)
 async def receive_edited_publication_button(message: Message, state: FSMContext) -> None:
     raw = message.text.strip()
-    if " - " not in raw:
-        await message.answer("Usa el formato <code>Texto del botón - https://ejemplo.com</code>.")
-        return
-    text, url = (part.strip() for part in raw.split(" - ", 1))
-    if not 1 <= len(text) <= 64:
-        await message.answer("El texto debe tener entre 1 y 64 caracteres.")
-        return
-    if not url.startswith(("https://", "http://", "tg://")):
-        await message.answer("El enlace debe comenzar por https://, http:// o tg://.")
+    try:
+        parsed = parse_button_spec(raw, allow_legacy=True)
+    except ValueError as exc:
+        await message.answer(str(exc))
         return
     data = await state.get_data()
     async with SessionFactory() as session:
@@ -429,8 +444,9 @@ async def receive_edited_publication_button(message: Message, state: FSMContext)
             await message.answer("El botón ya no está disponible.", reply_markup=main_menu())
             return
         publication_id = button.publication_id
-        button.text = text
-        button.url = url
+        button.text = parsed.text
+        button.url = parsed.url
+        button.style = parsed.style
         await session.commit()
         publication = await owned_publication(session, str(publication_id), message.from_user.id)
     await state.clear()
@@ -932,6 +948,7 @@ async def duplicate_publication(callback: CallbackQuery, state: FSMContext) -> N
                     position=button.position,
                     text=button.text,
                     url=button.url,
+                    style=getattr(button, "style", None),
                 )
             )
         for channel_id in destinations:

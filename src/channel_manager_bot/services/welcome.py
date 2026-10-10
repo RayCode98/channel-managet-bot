@@ -81,6 +81,37 @@ def parse_single_welcome_button(value: str) -> ParsedWelcomeButton:
     return parse_welcome_buttons(lines[0])[0]
 
 
+def parse_button_color(value: str) -> str | None:
+    """Normalize the public color names used by URL buttons."""
+    color = value.strip().lower()
+    if color not in COLOR_STYLES:
+        raise ValueError("Color no válido. Usa azul, verde, rojo o normal.")
+    return COLOR_STYLES[color]
+
+
+def parse_button_spec(value: str, *, allow_legacy: bool = False) -> ParsedWelcomeButton:
+    """Parse one button, optionally accepting the old ``texto - url`` form.
+
+    Welcome and farewell configuration has always required a color.  Publication,
+    template, and autocomplete editors also accept the legacy two-part form when
+    editing an existing button; those buttons remain ``normal`` for compatibility.
+    """
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise ValueError("Envía un solo botón en una línea: nombre - url - color")
+    line = lines[0]
+    if allow_legacy and line.count(" - ") == 1:
+        name, url = (part.strip() for part in line.split(" - ", 1))
+        if not 1 <= len(name) <= 64:
+            raise ValueError("El nombre del botón debe tener entre 1 y 64 caracteres.")
+        if not url.startswith(("https://", "http://", "tg://")) or len(url) > 2048:
+            raise ValueError(
+                "La URL debe comenzar con https://, http:// o tg:// y no superar 2048 caracteres."
+            )
+        return ParsedWelcomeButton(name, url, None)
+    return parse_single_welcome_button(line)
+
+
 def render_welcome_text(template: str | None, user_name: str, channel_name: str) -> str:
     text = template or ""
     return text.replace("{nombre}", escape(user_name)).replace("{canal}", escape(channel_name))

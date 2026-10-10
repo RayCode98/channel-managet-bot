@@ -1234,7 +1234,13 @@ def publication_markup(
         return None
     grouped = defaultdict(list)
     for button in sorted(buttons, key=lambda item: (item.row_index, item.position)):
-        grouped[button.row_index].append(InlineKeyboardButton(text=button.text, url=button.url))
+        grouped[button.row_index].append(
+            InlineKeyboardButton(
+                text=button.text,
+                url=button.url,
+                style=getattr(button, "style", None),
+            )
+        )
     return InlineKeyboardMarkup(inline_keyboard=list(grouped.values()))
 
 

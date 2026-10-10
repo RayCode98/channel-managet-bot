@@ -24,6 +24,7 @@ from ..keyboards import (
 from ..models import ContentTemplate, Publication, PublicationButton, TemplateButton
 from ..repository import get_active_channels, get_workspace
 from ..services.post_text import publication_content_type, publication_text_html
+from ..services.welcome import parse_button_color
 from ..services.rich_text import (
     custom_emoji_count,
     message_text_and_entities,
@@ -234,8 +235,24 @@ async def receive_template_button_text(message: Message, state: FSMContext) -> N
 @router.message(TemplateFlow.waiting_button_url, F.text)
 async def receive_template_button_url(message: Message, state: FSMContext) -> None:
     url = message.text.strip()
-    if not url.startswith(("https://", "http://", "tg://")):
-        await message.answer("El enlace debe comenzar con https://, http:// o tg://")
+    if not url.startswith(("https://", "http://", "tg://")) or len(url) > 2048:
+        await message.answer(
+            "El enlace debe comenzar con https://, http:// o tg:// y no superar 2048 caracteres."
+        )
+        return
+    await state.update_data(button_url=url)
+    await state.set_state(TemplateFlow.waiting_button_color)
+    await message.answer(
+        "Elige el color del botón: <b>azul</b>, <b>verde</b>, <b>rojo</b> o <b>normal</b>."
+    )
+
+
+@router.message(TemplateFlow.waiting_button_color, F.text)
+async def receive_template_button_color(message: Message, state: FSMContext) -> None:
+    try:
+        style = parse_button_color(message.text)
+    except ValueError as exc:
+        await message.answer(str(exc))
         return
     data = await state.get_data()
     async with SessionFactory() as session:
@@ -250,6 +267,7 @@ async def receive_template_button_url(message: Message, state: FSMContext) -> No
             .where(TemplateButton.template_id == template.id)
         )
         if (count or 0) >= 20:
+            await state.clear()
             await message.answer("La plantilla ya alcanzó el máximo de 20 botones.")
             return
         session.add(
@@ -258,7 +276,8 @@ async def receive_template_button_url(message: Message, state: FSMContext) -> No
                 row_index=count or 0,
                 position=0,
                 text=data["button_text"],
-                url=url,
+                url=data["button_url"],
+                style=style,
             )
         )
         await session.commit()
@@ -401,6 +420,7 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
                     position=button.position,
                     text=button.text,
                     url=button.url,
+                    style=getattr(button, "style", None),
                 )
             )
         await session.commit()

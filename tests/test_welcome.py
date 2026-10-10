@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 from channel_manager_bot.services.welcome import (
+    parse_button_color,
+    parse_button_spec,
     parse_single_welcome_button,
     parse_welcome_buttons,
     render_welcome_text,
@@ -40,6 +42,18 @@ def test_single_button_parser_preserves_existing_format_and_rejects_multiple_lin
         parse_single_welcome_button(
             "Uno - https://example.com/1 - verde\nDos - https://example.com/2 - rojo"
         )
+
+
+def test_generic_button_parser_accepts_colored_and_legacy_publication_forms():
+    colored = parse_button_spec("Oferta - https://example.com/oferta - verde")
+    legacy = parse_button_spec("Oferta - https://example.com/oferta", allow_legacy=True)
+
+    assert colored.style == "success"
+    assert legacy.style is None
+    assert parse_button_color("normal") is None
+
+    with pytest.raises(ValueError, match="Color no válido"):
+        parse_button_color("morado")
 
 
 def test_welcome_placeholders_are_replaced_and_escaped():
