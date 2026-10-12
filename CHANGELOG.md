@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 0.15.2
+
+- Añade **Eliminar todas las programadas** dentro del Plan de contenido, con confirmación y alcance aislado al espacio de trabajo.
+- Cancela todas las ejecuciones pendientes, incluidas las recurrencias futuras, sin tocar publicaciones ya enviadas ni sus estadísticas.
+- Añade **Eliminar todas las plantillas**, con confirmación y eliminación en cascada de sus botones.
+- Conserva las publicaciones creadas desde plantillas aunque la plantilla original sea eliminada.
+- No requiere una migración adicional; el esquema permanece en `20261010_0015`.
+
 ## 0.15.1
 
 - Añade colores a los botones URL de publicaciones, plantillas y autocompletado: `azul`, `verde`, `rojo` y `normal`.

@@ -27,6 +27,7 @@ from channel_manager_bot.keyboards import (
     campaign_link_detail_menu,
     campaign_links_menu,
     template_detail_menu,
+    templates_menu,
     timing_menu,
     ttl_label,
     ttl_menu,
@@ -77,6 +78,16 @@ def test_publication_markup_preserves_button_style():
     )
 
     assert markup.inline_keyboard[0][0].style == "danger"
+
+
+def test_templates_menu_offers_bulk_delete():
+    menu_callbacks = [
+        button.callback_data
+        for row in templates_menu().inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    assert "tpl:clear" in menu_callbacks
 
 
 def test_ttl_labels_and_callbacks():

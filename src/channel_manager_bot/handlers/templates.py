@@ -111,6 +111,59 @@ async def new_template(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data == "tpl:clear")
+async def ask_clear_templates(callback: CallbackQuery) -> None:
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        total = (
+            await session.scalar(
+                select(func.count())
+                .select_from(ContentTemplate)
+                .where(ContentTemplate.workspace_id == workspace.id)
+            )
+            or 0
+        )
+    if not total:
+        await callback.answer("No hay plantillas para eliminar.", show_alert=True)
+        return
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Sí, eliminar todas", callback_data="tpl:clear:confirm"
+                )
+            ],
+            [InlineKeyboardButton(text="Cancelar", callback_data="tpl:list")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"⚠️ <b>Eliminar todas las plantillas</b>\n\n"
+        f"Se eliminarán definitivamente <b>{total}</b> plantilla(s) y sus botones.\n"
+        "Las publicaciones ya creadas a partir de ellas no se modificarán.",
+        reply_markup=markup,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "tpl:clear:confirm")
+async def clear_templates(callback: CallbackQuery) -> None:
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        templates = list(
+            await session.scalars(
+                select(ContentTemplate).where(ContentTemplate.workspace_id == workspace.id)
+            )
+        )
+        for template in templates:
+            await session.delete(template)
+        await session.commit()
+    await callback.message.edit_text(
+        f"✅ Se eliminaron <b>{len(templates)}</b> plantilla(s).",
+        reply_markup=templates_menu(),
+    )
+    await callback.answer("Plantillas eliminadas")
+
+
 @router.message(TemplateFlow.waiting_name, F.text)
 async def receive_template_name(message: Message, state: FSMContext) -> None:
     name = message.text.strip()

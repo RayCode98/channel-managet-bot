@@ -38,8 +38,8 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Copia de texto, formato, multimedia y álbumes; los botones URL se conservan en modo limpio.
 - Protección contra reenvíos duplicados y ciclos entre chats.
 - Menús independientes de Bienvenidas, Despedidas, Autocompletado, Firmas y Filtros de unión.
-- Plan de contenido paginado y agrupado por fecha.
-- Plantillas reutilizables con contenido, botones con color y autoeliminación.
+- Plan de contenido paginado y agrupado por fecha, con eliminación masiva segura de las programadas.
+- Plantillas reutilizables con contenido, botones con color y autoeliminación, incluida eliminación masiva.
 - Vista previa exacta de plantillas antes de utilizarlas.
 - Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
@@ -123,7 +123,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.0, sigue [`UPGRADE_V0.15.1.md`](UPGRADE_V0.15.1.md). Alembic aplicará únicamente las migraciones pendientes y conservará los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.1, sigue [`UPGRADE_V0.15.2.md`](UPGRADE_V0.15.2.md). Esta actualización no requiere una migración nueva y conserva los datos existentes.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
@@ -153,6 +153,15 @@ bienvenidas y despedidas. Después de escribir el texto y la URL, el bot solicit
 predeterminado. La vista previa, las publicaciones recurrentes, las plantillas utilizadas y los
 reenvíos conservan el estilo elegido. Los botones creados antes de v0.15.1 conservan el color normal
 porque su estilo queda guardado como `NULL`.
+
+## Limpieza masiva
+
+Desde **Plan de contenido** puedes elegir **Eliminar todas las programadas**. El bot solicita una
+confirmación y marca como canceladas todas las publicaciones con ejecución pendiente, incluidas las
+recurrencias futuras. No toca publicaciones ya enviadas, sus entregas ni sus estadísticas.
+
+Desde **Plantillas** puedes elegir **Eliminar todas las plantillas**. También requiere confirmación,
+elimina sus botones y no modifica publicaciones o borradores que ya fueron creados a partir de ellas.
 
 ## Emojis premium
 

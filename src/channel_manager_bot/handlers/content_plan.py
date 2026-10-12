@@ -113,6 +113,15 @@ async def render_plan(callback: CallbackQuery, page: int) -> None:
         )
     if navigation:
         rows.append(navigation)
+    if total:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Eliminar todas las programadas",
+                    callback_data=f"plan:clear:{page}",
+                )
+            ]
+        )
     rows.extend(
         [
             [InlineKeyboardButton(text="🔄 Actualizar", callback_data=f"plan:page:{page}")],
@@ -129,6 +138,69 @@ async def show_plan(callback: CallbackQuery) -> None:
     page = int(callback.data.rsplit(":", 1)[1])
     await render_plan(callback, page)
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("plan:clear:"))
+async def ask_clear_scheduled(callback: CallbackQuery) -> None:
+    try:
+        page = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Página inválida.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        total = (
+            await session.scalar(
+                select(func.count())
+                .select_from(Publication)
+                .where(
+                    Publication.workspace_id == workspace.id,
+                    Publication.status == PublicationStatus.scheduled,
+                    Publication.scheduled_at.is_not(None),
+                )
+            )
+            or 0
+        )
+    if not total:
+        await callback.answer("No hay publicaciones programadas.", show_alert=True)
+        return
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Sí, eliminar del plan", callback_data="plan:clear-confirm"
+                )
+            ],
+            [InlineKeyboardButton(text="Cancelar", callback_data=f"plan:page:{page}")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"⚠️ <b>Eliminar publicaciones programadas</b>\n\n"
+        f"Se quitarán <b>{total}</b> publicación(es) del Plan de contenido.\n"
+        "Las publicaciones ya enviadas no se tocarán. Esta acción detendrá también las recurrencias pendientes.",
+        reply_markup=markup,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "plan:clear-confirm")
+async def clear_scheduled(callback: CallbackQuery) -> None:
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        publications = list(
+            await session.scalars(
+                select(Publication).where(
+                    Publication.workspace_id == workspace.id,
+                    Publication.status == PublicationStatus.scheduled,
+                    Publication.scheduled_at.is_not(None),
+                )
+            )
+        )
+        for publication in publications:
+            publication.status = PublicationStatus.cancelled
+        await session.commit()
+    await render_plan(callback, 0)
+    await callback.answer(f"{len(publications)} publicación(es) eliminada(s) del plan")
 
 
 @router.callback_query(F.data.startswith("plan:cancel:"))

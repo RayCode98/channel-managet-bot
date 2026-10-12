@@ -1248,6 +1248,11 @@ def templates_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Crear plantilla", callback_data="tpl:new")],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Eliminar todas las plantillas", callback_data="tpl:clear"
+                )
+            ],
             [InlineKeyboardButton(text=f"⬅️ {tr('back_home')}", callback_data="home")],
         ]
     )
