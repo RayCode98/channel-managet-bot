@@ -3,6 +3,8 @@ import uuid
 from channel_manager_bot.keyboards import (
     alphabet_filter_menu,
     autocomplete_buttons_menu,
+    campaign_link_detail_menu,
+    campaign_links_menu,
     channel_detail_menu,
     channel_post_text_menu,
     chat_connection_keyboard,
@@ -24,8 +26,9 @@ from channel_manager_bot.keyboards import (
     relay_rule_menu,
     relay_sources_menu,
     relay_targets_menu,
-    campaign_link_detail_menu,
-    campaign_links_menu,
+    stats_menu,
+    stats_period_menu,
+    template_buttons_menu,
     template_detail_menu,
     templates_menu,
     timing_menu,
@@ -33,8 +36,6 @@ from channel_manager_bot.keyboards import (
     ttl_menu,
     welcome_buttons_menu,
     welcome_menu,
-    stats_menu,
-    stats_period_menu,
 )
 from channel_manager_bot.models import (
     AutocompleteButton,
@@ -42,6 +43,7 @@ from channel_manager_bot.models import (
     FarewellButton,
     RelayDestination,
     RelayRule,
+    TemplateButton,
     WelcomeButton,
 )
 
@@ -73,9 +75,7 @@ def test_publication_markup_is_none_without_buttons():
 
 
 def test_publication_markup_preserves_button_style():
-    markup = publication_markup(
-        [Button("Oferta", "https://example.com", 0, 0, style="danger")]
-    )
+    markup = publication_markup([Button("Oferta", "https://example.com", 0, 0, style="danger")])
 
     assert markup.inline_keyboard[0][0].style == "danger"
 
@@ -328,6 +328,25 @@ def test_publication_and_template_menus_offer_button_management():
     assert f"pub:buttons:{item_id}" in publication_callbacks
     assert f"tpl:buttons:{item_id}" in template_callbacks
     assert f"tpl:preview:{item_id}" in template_callbacks
+    assert f"tpl:editcontent:{item_id}" in template_callbacks
+    assert f"tpl:editname:{item_id}" in template_callbacks
+
+    button = TemplateButton(
+        id=uuid.uuid4(),
+        template_id=item_id,
+        row_index=0,
+        position=0,
+        text="Oferta",
+        url="https://example.com",
+    )
+    button_callbacks = [
+        button.callback_data
+        for row in template_buttons_menu(item_id, [button]).inline_keyboard
+        for button in row
+        if button.callback_data
+    ]
+    assert f"tpl:bedit:{button.id}" in button_callbacks
+    assert f"tpl:bdel:{button.id}" in button_callbacks
 
 
 def test_professional_editor_menu_exposes_draft_recovery_and_help():
@@ -351,9 +370,7 @@ def test_growth_statistics_menus_expose_periods_campaigns_and_controls():
         if button.callback_data
     ]
     period_callbacks = [
-        button.callback_data
-        for row in stats_period_menu().inline_keyboard
-        for button in row
+        button.callback_data for row in stats_period_menu().inline_keyboard for button in row
     ]
     links_callbacks = [
         button.callback_data

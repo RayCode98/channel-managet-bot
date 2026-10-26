@@ -40,6 +40,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Menús independientes de Bienvenidas, Despedidas, Autocompletado, Firmas y Filtros de unión.
 - Plan de contenido paginado y agrupado por fecha, con eliminación masiva segura de las programadas.
 - Plantillas reutilizables con contenido, botones con color y autoeliminación, incluida eliminación masiva.
+- Edición individual del nombre, descripción y botones de una plantilla, con propagación a sus recurrencias futuras.
 - Vista previa exacta de plantillas antes de utilizarlas.
 - Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
@@ -123,7 +124,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.1, sigue [`UPGRADE_V0.15.2.md`](UPGRADE_V0.15.2.md). Esta actualización no requiere una migración nueva y conserva los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.2, sigue [`UPGRADE_V0.16.0.md`](UPGRADE_V0.16.0.md). Esta actualización agrega la migración `20261026_0016_template_edit_propagation` y conserva los datos existentes.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
@@ -162,6 +163,18 @@ recurrencias futuras. No toca publicaciones ya enviadas, sus entregas ni sus est
 
 Desde **Plantillas** puedes elegir **Eliminar todas las plantillas**. También requiere confirmación,
 elimina sus botones y no modifica publicaciones o borradores que ya fueron creados a partir de ellas.
+
+## Edición de plantillas y recurrencias
+
+Desde el detalle de una plantilla puedes editar el nombre, reemplazar su descripción/contenido y
+administrar cada botón de forma individual. Al editar el contenido, el texto enriquecido, los emojis
+premium, los botones, sus colores y la autoeliminación se sincronizan en las publicaciones recurrentes
+futuras que fueron creadas desde esa plantilla.
+
+La sincronización solo cambia ejecuciones con estado pendiente; no modifica publicaciones enviadas,
+historial, estadísticas ni publicaciones independientes. Las recurrencias creadas antes de v0.16.0
+no tienen un vínculo fiable con su plantilla original y no se asocian retroactivamente; puedes
+recrearlas desde la plantilla para habilitar la sincronización.
 
 ## Emojis premium
 

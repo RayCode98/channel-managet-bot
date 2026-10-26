@@ -11,6 +11,7 @@ from ..keyboards import publication_markup
 from ..models import (
     Channel,
     ChannelStatus,
+    ContentTemplate,
     Publication,
     PublicationButton,
     PublicationChannel,
@@ -50,16 +51,28 @@ async def create_next_recurrence(
     if existing:
         return None
 
+    template = None
+    if publication.template_id is not None:
+        template = await session.scalar(
+            select(ContentTemplate)
+            .options(selectinload(ContentTemplate.buttons))
+            .where(
+                ContentTemplate.id == publication.template_id,
+                ContentTemplate.workspace_id == publication.workspace_id,
+            )
+        )
+    source = template or publication
     next_publication = Publication(
         workspace_id=publication.workspace_id,
+        template_id=publication.template_id,
         creator_user_id=publication.creator_user_id,
-        source_chat_id=publication.source_chat_id,
-        source_message_id=publication.source_message_id,
-        source_content_type=publication.source_content_type,
-        source_text_html=publication.source_text_html,
-        source_text_plain=publication.source_text_plain,
-        source_entities_json=publication.source_entities_json,
-        preview=publication.preview,
+        source_chat_id=source.source_chat_id,
+        source_message_id=source.source_message_id,
+        source_content_type=source.source_content_type,
+        source_text_html=source.source_text_html,
+        source_text_plain=source.source_text_plain,
+        source_entities_json=source.source_entities_json,
+        preview=source.preview,
         status=PublicationStatus.scheduled,
         scheduled_at=next_recurrence_at(
             publication.scheduled_at,
@@ -67,7 +80,7 @@ async def create_next_recurrence(
             now=utcnow(),
             timezone_name=publication.recurrence_timezone or "UTC",
         ),
-        delete_after_minutes=publication.delete_after_minutes,
+        delete_after_minutes=source.delete_after_minutes,
         recurrence_series_id=publication.recurrence_series_id,
         recurrence_interval_days=publication.recurrence_interval_days,
         recurrence_sequence=next_sequence,
@@ -75,7 +88,7 @@ async def create_next_recurrence(
     )
     session.add(next_publication)
     await session.flush()
-    for button in publication.buttons:
+    for button in source.buttons:
         session.add(
             PublicationButton(
                 publication_id=next_publication.id,

@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram import F, Router
 from aiogram.enums import ChatType
-from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramAPIError
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -17,8 +17,8 @@ from ..keyboards import (
     channel_selector,
     composer_menu,
     main_menu,
-    publication_markup,
     publication_buttons_menu,
+    publication_markup,
     recurrence_interval_menu,
     recurrence_label,
     recurrence_start_menu,
@@ -200,7 +200,9 @@ async def receive_edited_content(message: Message, state: FSMContext) -> None:
         return
     data = await state.get_data()
     async with SessionFactory() as session:
-        publication = await owned_publication(session, data.get("publication_id", ""), message.from_user.id)
+        publication = await owned_publication(
+            session, data.get("publication_id", ""), message.from_user.id
+        )
         if publication is None or publication.status != PublicationStatus.draft:
             await state.clear()
             await message.answer("La publicación ya no se puede editar.", reply_markup=main_menu())
@@ -212,13 +214,10 @@ async def receive_edited_content(message: Message, state: FSMContext) -> None:
         delete_after_minutes = publication.delete_after_minutes
     await state.clear()
     premium_notice = (
-        f"\n✨ Conservamos {premium_count} emoji premium en el borrador."
-        if premium_count
-        else ""
+        f"\n✨ Conservamos {premium_count} emoji premium en el borrador." if premium_count else ""
     )
     await message.answer(
-        "✅ Contenido actualizado. Los demás ajustes se conservaron."
-        f"{premium_notice}",
+        f"✅ Contenido actualizado. Los demás ajustes se conservaron.{premium_notice}",
         reply_markup=composer_menu(publication_id, button_count, delete_after_minutes),
     )
 

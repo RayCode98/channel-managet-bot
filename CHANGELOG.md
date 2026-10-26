@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 0.16.0
+
+- Permite editar el nombre y la descripción/contenido de una plantilla desde Telegram.
+- Permite editar o eliminar cada botón de una plantilla sin reconstruir los demás, incluyendo URL y color.
+- Vincula cada publicación creada desde una plantilla con su plantilla de origen.
+- Propaga cambios de contenido, formato, emojis premium, botones, colores y autoeliminación a las
+  ejecuciones recurrentes futuras vinculadas.
+- Mantiene intactas las publicaciones enviadas, el historial, las estadísticas y las publicaciones
+  independientes.
+- Añade la migración incremental `20261026_0016_template_edit_propagation`.
+- Las recurrencias creadas antes de v0.16.0 no se asocian retroactivamente porque no conservaban el
+  identificador de su plantilla original.
+
 ## 0.15.2
 
 - Añade **Eliminar todas las programadas** dentro del Plan de contenido, con confirmación y alcance aislado al espacio de trabajo.

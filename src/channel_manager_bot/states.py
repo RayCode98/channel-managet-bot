@@ -36,9 +36,12 @@ class ChannelPostTextFlow(StatesGroup):
 class TemplateFlow(StatesGroup):
     waiting_name = State()
     waiting_content = State()
+    waiting_name_edit = State()
+    waiting_content_edit = State()
     waiting_button_text = State()
     waiting_button_url = State()
     waiting_button_color = State()
+    waiting_button_edit = State()
 
 
 class ChannelConnectionFlow(StatesGroup):

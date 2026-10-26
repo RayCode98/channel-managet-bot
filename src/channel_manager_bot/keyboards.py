@@ -186,9 +186,7 @@ def campaign_channels_menu(channels) -> InlineKeyboardMarkup:
         ]
         for channel in channels
     ]
-    rows.append(
-        [InlineKeyboardButton(text="⬅️ Enlaces de campaña", callback_data="campaign:list")]
-    )
+    rows.append([InlineKeyboardButton(text="⬅️ Enlaces de campaña", callback_data="campaign:list")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -286,6 +284,7 @@ def channel_detail_menu(channel: Channel) -> InlineKeyboardMarkup:
 
 def chat_connection_keyboard(request_id: int) -> ReplyKeyboardMarkup:
     """Native Telegram chat picker used for an explicit, unambiguous connection."""
+
     def required_rights(*, channel: bool) -> ChatAdministratorRights:
         return ChatAdministratorRights(
             is_anonymous=False,
@@ -305,6 +304,7 @@ def chat_connection_keyboard(request_id: int) -> ReplyKeyboardMarkup:
             can_pin_messages=False if not channel else None,
             can_manage_topics=False if not channel else None,
         )
+
     return ReplyKeyboardMarkup(
         keyboard=[
             [
@@ -1264,6 +1264,12 @@ def template_detail_menu(
     rows = [
         [InlineKeyboardButton(text="🚀 Usar plantilla", callback_data=f"tpl:use:{template_id}")],
         [InlineKeyboardButton(text="👁 Vista previa", callback_data=f"tpl:preview:{template_id}")],
+        [
+            InlineKeyboardButton(
+                text="✏️ Editar descripción", callback_data=f"tpl:editcontent:{template_id}"
+            )
+        ],
+        [InlineKeyboardButton(text="✏️ Editar nombre", callback_data=f"tpl:editname:{template_id}")],
     ]
     if button_count < 20:
         rows.append(
@@ -1304,7 +1310,12 @@ def template_buttons_menu(
     template_id: uuid.UUID, buttons: list[TemplateButton]
 ) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=f"🗑 {button.text}"[:64], callback_data=f"tpl:bdel:{button.id}")]
+        [
+            InlineKeyboardButton(
+                text=f"✏️ {button.text}"[:64], callback_data=f"tpl:bedit:{button.id}"
+            ),
+            InlineKeyboardButton(text="🗑", callback_data=f"tpl:bdel:{button.id}"),
+        ]
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
     rows.append(
@@ -1330,7 +1341,11 @@ def publication_buttons_menu(
         for button in sorted(buttons, key=lambda item: (item.row_index, item.position))
     ]
     rows.append(
-        [InlineKeyboardButton(text="➕ Agregar otro botón", callback_data=f"pub:button:{publication_id}")]
+        [
+            InlineKeyboardButton(
+                text="➕ Agregar otro botón", callback_data=f"pub:button:{publication_id}"
+            )
+        ]
     )
     rows.append(
         [

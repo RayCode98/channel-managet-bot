@@ -85,8 +85,10 @@ async def show_stats_overview(callback: CallbackQuery, bot: Bot) -> None:
         f"👥 Comunidad actual: <b>{current_total:,}</b>",
         f"📈 Cambio estimado: <b>{_signed(change_total)}</b>",
         f"📝 Publicaciones entregadas: <b>{publications.publications}</b>",
-        f"✅ Entregas correctas: <b>{publications.successful:,}</b> "
-        f"({publications.success_rate:.1f}%)",
+        (
+            f"✅ Entregas correctas: <b>{publications.successful:,}</b> "
+            f"({publications.success_rate:.1f}%)"
+        ),
         f"🙋 Solicitudes recibidas: <b>{members.received:,}</b>",
         f"✅ Solicitudes aprobadas: <b>{members.approved:,}</b>",
         f"⏳ Pendientes reales actuales: <b>{members.active_pending:,}</b>",

@@ -21,16 +21,22 @@ from ..keyboards import (
     ttl_label,
     ttl_menu,
 )
-from ..models import ContentTemplate, Publication, PublicationButton, TemplateButton
+from ..models import (
+    ContentTemplate,
+    Publication,
+    PublicationButton,
+    PublicationStatus,
+    TemplateButton,
+)
 from ..repository import get_active_channels, get_workspace
 from ..services.post_text import publication_content_type, publication_text_html
-from ..services.welcome import parse_button_color
 from ..services.rich_text import (
     custom_emoji_count,
     message_text_and_entities,
     serialize_entities,
     stored_custom_emoji_count,
 )
+from ..services.welcome import parse_button_color, parse_button_spec
 from ..states import PublicationFlow, TemplateFlow
 
 router = Router(name="templates")
@@ -50,6 +56,44 @@ async def owned_template(session, template_id: str, user_id: int) -> ContentTemp
         .options(selectinload(ContentTemplate.buttons))
         .where(ContentTemplate.id == parsed, ContentTemplate.workspace_id == workspace.id)
     )
+
+
+async def sync_recurrent_publications(session, template: ContentTemplate) -> int:
+    """Apply the current template snapshot to its future recurring publication."""
+    publications = list(
+        await session.scalars(
+            select(Publication)
+            .options(selectinload(Publication.buttons))
+            .where(
+                Publication.template_id == template.id,
+                Publication.workspace_id == template.workspace_id,
+                Publication.status == PublicationStatus.scheduled,
+                Publication.scheduled_at.is_not(None),
+                Publication.recurrence_interval_days.is_not(None),
+            )
+        )
+    )
+    for publication in publications:
+        publication.source_chat_id = template.source_chat_id
+        publication.source_message_id = template.source_message_id
+        publication.source_content_type = template.source_content_type
+        publication.source_text_html = template.source_text_html
+        publication.source_text_plain = template.source_text_plain
+        publication.source_entities_json = template.source_entities_json
+        publication.preview = template.preview
+        publication.delete_after_minutes = template.delete_after_minutes
+        publication.buttons.clear()
+        publication.buttons.extend(
+            PublicationButton(
+                row_index=button.row_index,
+                position=button.position,
+                text=button.text,
+                url=button.url,
+                style=getattr(button, "style", None),
+            )
+            for button in template.buttons
+        )
+    return len(publications)
 
 
 async def show_template(callback: CallbackQuery, template: ContentTemplate) -> None:
@@ -128,11 +172,7 @@ async def ask_clear_templates(callback: CallbackQuery) -> None:
         return
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Sí, eliminar todas", callback_data="tpl:clear:confirm"
-                )
-            ],
+            [InlineKeyboardButton(text="Sí, eliminar todas", callback_data="tpl:clear:confirm")],
             [InlineKeyboardButton(text="Cancelar", callback_data="tpl:list")],
         ]
     )
@@ -238,6 +278,119 @@ async def open_template(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("tpl:editcontent:"))
+async def ask_edit_template_content(callback: CallbackQuery, state: FSMContext) -> None:
+    template_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        template = await owned_template(session, template_id, callback.from_user.id)
+    if template is None:
+        await callback.answer("Plantilla no encontrada.", show_alert=True)
+        return
+    await state.set_state(TemplateFlow.waiting_content_edit)
+    await state.update_data(template_id=template_id)
+    await callback.message.answer(
+        "✏️ <b>Editar descripción de la plantilla</b>\n\n"
+        "Envía el nuevo texto enriquecido o contenido multimedia. Esta descripción sustituirá "
+        "la de la plantilla y se aplicará a sus publicaciones recurrentes futuras."
+    )
+    await callback.answer()
+
+
+@router.message(TemplateFlow.waiting_content_edit, F.chat.type == ChatType.PRIVATE)
+async def receive_edited_template_content(message: Message, state: FSMContext) -> None:
+    if not any(
+        [
+            message.text,
+            message.photo,
+            message.video,
+            message.animation,
+            message.audio,
+            message.document,
+            message.voice,
+        ]
+    ):
+        await message.answer("Ese contenido no es compatible. Envía texto o contenido multimedia.")
+        return
+    data = await state.get_data()
+    source_text_plain, source_entities = message_text_and_entities(message)
+    premium_count = custom_emoji_count(source_entities)
+    async with SessionFactory() as session:
+        template = await owned_template(session, data["template_id"], message.from_user.id)
+        if template is None:
+            await state.clear()
+            await message.answer("Plantilla no encontrada.", reply_markup=templates_menu())
+            return
+        template.source_chat_id = message.chat.id
+        template.source_message_id = message.message_id
+        template.source_content_type = publication_content_type(message)
+        template.source_text_html = publication_text_html(message)
+        template.source_text_plain = source_text_plain
+        template.source_entities_json = serialize_entities(source_entities)
+        template.preview = (message.text or message.caption or "Contenido multimedia")[:500]
+        recurrent_count = await sync_recurrent_publications(session, template)
+        await session.commit()
+        template_id = template.id
+        button_count = len(template.buttons)
+        delete_after_minutes = template.delete_after_minutes
+    await state.clear()
+    premium_notice = (
+        f"\n✨ Detectamos <b>{premium_count}</b> emoji{'s' if premium_count != 1 else ''} premium."
+        if premium_count
+        else ""
+    )
+    recurring_notice = (
+        f"\n🔁 Actualicé también <b>{recurrent_count}</b> publicación(es) recurrente(s) futuras."
+        if recurrent_count
+        else "\nℹ️ No hay publicaciones recurrentes futuras vinculadas a esta plantilla."
+    )
+    await message.answer(
+        f"✅ Descripción de la plantilla actualizada.{premium_notice}{recurring_notice}",
+        reply_markup=template_detail_menu(template_id, button_count, delete_after_minutes),
+    )
+
+
+@router.callback_query(F.data.startswith("tpl:editname:"))
+async def ask_edit_template_name(callback: CallbackQuery, state: FSMContext) -> None:
+    template_id = callback.data.rsplit(":", 1)[1]
+    async with SessionFactory() as session:
+        template = await owned_template(session, template_id, callback.from_user.id)
+    if template is None:
+        await callback.answer("Plantilla no encontrada.", show_alert=True)
+        return
+    await state.set_state(TemplateFlow.waiting_name_edit)
+    await state.update_data(template_id=template_id)
+    await callback.message.answer(
+        f"✏️ Nombre actual: <b>{escape(template.name)}</b>\n\n"
+        "Escribe el nuevo nombre de la plantilla (máximo 100 caracteres):"
+    )
+    await callback.answer()
+
+
+@router.message(TemplateFlow.waiting_name_edit, F.text)
+async def receive_edited_template_name(message: Message, state: FSMContext) -> None:
+    name = message.text.strip()
+    if not 1 <= len(name) <= 100:
+        await message.answer("El nombre debe tener entre 1 y 100 caracteres.")
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        template = await owned_template(session, data["template_id"], message.from_user.id)
+        if template is None:
+            await state.clear()
+            await message.answer("Plantilla no encontrada.", reply_markup=templates_menu())
+            return
+        template.name = name
+        await session.commit()
+        template_id = template.id
+        button_count = len(template.buttons)
+        delete_after_minutes = template.delete_after_minutes
+    await state.clear()
+    await message.answer(
+        "✅ Nombre de la plantilla actualizado.",
+        reply_markup=template_detail_menu(template_id, button_count, delete_after_minutes),
+    )
+
+
 @router.callback_query(F.data.startswith("tpl:preview:"))
 async def preview_template(callback: CallbackQuery) -> None:
     template_id = callback.data.rsplit(":", 1)[1]
@@ -333,11 +486,25 @@ async def receive_template_button_color(message: Message, state: FSMContext) -> 
                 style=style,
             )
         )
+        await session.flush()
+        template = await owned_template(session, str(template.id), message.from_user.id)
+        if template is None:
+            await state.clear()
+            await message.answer(
+                "La plantilla ya no está disponible.", reply_markup=templates_menu()
+            )
+            return
+        recurrent_count = await sync_recurrent_publications(session, template)
         await session.commit()
         button_count = (count or 0) + 1
     await state.clear()
     await message.answer(
-        "✅ Botón añadido a la plantilla.",
+        "✅ Botón añadido a la plantilla."
+        + (
+            f" Se actualizó también {recurrent_count} publicación(es) recurrente(s) futura(s)."
+            if recurrent_count
+            else ""
+        ),
         reply_markup=template_detail_menu(template.id, button_count, template.delete_after_minutes),
     )
 
@@ -355,10 +522,105 @@ async def manage_template_buttons(callback: CallbackQuery) -> None:
         return
     await callback.message.edit_text(
         f"🧹 <b>Botones de {escape(template.name)}</b>\n\n"
-        "Pulsa el botón que deseas eliminar. Los demás permanecerán sin cambios.",
+        "Pulsa ✏️ para editar o 🗑 para eliminar. Los cambios se aplicarán también a las "
+        "publicaciones recurrentes futuras de esta plantilla.",
         reply_markup=template_buttons_menu(template.id, template.buttons),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("tpl:bedit:"))
+async def edit_template_button(callback: CallbackQuery, state: FSMContext) -> None:
+    try:
+        button_id = uuid.UUID(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("Botón inválido.", show_alert=True)
+        return
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, callback.from_user.id)
+        if workspace is None:
+            await callback.answer("Espacio de trabajo no encontrado.", show_alert=True)
+            return
+        button = await session.scalar(
+            select(TemplateButton)
+            .join(ContentTemplate, ContentTemplate.id == TemplateButton.template_id)
+            .where(
+                TemplateButton.id == button_id,
+                ContentTemplate.workspace_id == workspace.id,
+            )
+        )
+    if button is None:
+        await callback.answer("Botón no encontrado.", show_alert=True)
+        return
+    await state.set_state(TemplateFlow.waiting_button_edit)
+    await state.update_data(button_id=str(button.id))
+    await callback.message.answer(
+        f"✏️ Editando <b>{escape(button.text)}</b>.\n\n"
+        "Envía una sola línea con el formato:\n"
+        "<code>Texto del botón - https://ejemplo.com - azul</code>\n"
+        "También se acepta el formato anterior de dos partes; quedará en color normal."
+    )
+    await callback.answer()
+
+
+@router.message(TemplateFlow.waiting_button_edit, F.text)
+async def receive_edited_template_button(message: Message, state: FSMContext) -> None:
+    try:
+        parsed = parse_button_spec(message.text.strip(), allow_legacy=True)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    data = await state.get_data()
+    async with SessionFactory() as session:
+        workspace = await get_workspace(session, message.from_user.id)
+        if workspace is None:
+            await state.clear()
+            await message.answer("Espacio de trabajo no encontrado.", reply_markup=templates_menu())
+            return
+        try:
+            button_id = uuid.UUID(data["button_id"])
+        except (KeyError, ValueError):
+            await state.clear()
+            await message.answer("Botón inválido.", reply_markup=templates_menu())
+            return
+        button = await session.scalar(
+            select(TemplateButton)
+            .join(ContentTemplate, ContentTemplate.id == TemplateButton.template_id)
+            .where(
+                TemplateButton.id == button_id,
+                ContentTemplate.workspace_id == workspace.id,
+            )
+        )
+        if button is None:
+            await state.clear()
+            await message.answer("El botón ya no está disponible.", reply_markup=templates_menu())
+            return
+        button.text = parsed.text
+        button.url = parsed.url
+        button.style = parsed.style
+        await session.flush()
+        template = await owned_template(session, str(button.template_id), message.from_user.id)
+        if template is None:
+            await state.clear()
+            await message.answer(
+                "La plantilla ya no está disponible.", reply_markup=templates_menu()
+            )
+            return
+        recurrent_count = await sync_recurrent_publications(session, template)
+        await session.commit()
+        template_id = template.id
+        button_count = len(template.buttons)
+        delete_after_minutes = template.delete_after_minutes
+    await state.clear()
+    await message.answer(
+        "✅ Botón de la plantilla actualizado."
+        + (
+            f" Se actualizó también {recurrent_count} publicación(es) recurrente(s) futura(s)."
+            if recurrent_count
+            else ""
+        ),
+        reply_markup=template_detail_menu(template_id, button_count, delete_after_minutes),
+    )
 
 
 @router.callback_query(F.data.startswith("tpl:bdel:"))
@@ -370,6 +632,9 @@ async def delete_template_button(callback: CallbackQuery) -> None:
         return
     async with SessionFactory() as session:
         workspace = await get_workspace(session, callback.from_user.id)
+        if workspace is None:
+            await callback.answer("Espacio de trabajo no encontrado.", show_alert=True)
+            return
         button = await session.scalar(
             select(TemplateButton)
             .join(ContentTemplate, ContentTemplate.id == TemplateButton.template_id)
@@ -396,6 +661,8 @@ async def delete_template_button(callback: CallbackQuery) -> None:
             remaining_button.position = 0
         await session.commit()
         template = await owned_template(session, str(template_id), callback.from_user.id)
+        recurrent_count = await sync_recurrent_publications(session, template) if template else 0
+        await session.commit()
     if template is None:
         await callback.answer("La plantilla ya no está disponible.", show_alert=True)
         return
@@ -405,7 +672,10 @@ async def delete_template_button(callback: CallbackQuery) -> None:
         )
     else:
         await show_template(callback, template)
-    await callback.answer("Botón eliminado")
+    message = "Botón eliminado"
+    if recurrent_count:
+        message += f" y actualizado en {recurrent_count} publicación(es) recurrente(s) futura(s)"
+    await callback.answer(message)
 
 
 @router.callback_query(F.data.startswith("tpl:ttl:"))
@@ -434,9 +704,13 @@ async def set_template_ttl(callback: CallbackQuery) -> None:
             await callback.answer("Plantilla no encontrada.", show_alert=True)
             return
         template.delete_after_minutes = minutes or None
+        recurrent_count = await sync_recurrent_publications(session, template)
         await session.commit()
     await show_template(callback, template)
-    await callback.answer("Autoeliminación actualizada")
+    message = "Autoeliminación actualizada"
+    if recurrent_count:
+        message += f" y aplicada a {recurrent_count} publicación(es) recurrente(s) futura(s)"
+    await callback.answer(message)
 
 
 @router.callback_query(F.data.startswith("tpl:use:"))
@@ -453,6 +727,7 @@ async def use_template(callback: CallbackQuery, state: FSMContext) -> None:
             return
         publication = Publication(
             workspace_id=template.workspace_id,
+            template_id=template.id,
             creator_user_id=callback.from_user.id,
             source_chat_id=template.source_chat_id,
             source_message_id=template.source_message_id,
