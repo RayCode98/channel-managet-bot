@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from ..database import SessionFactory
@@ -314,24 +315,36 @@ async def receive_edited_template_content(message: Message, state: FSMContext) -
     data = await state.get_data()
     source_text_plain, source_entities = message_text_and_entities(message)
     premium_count = custom_emoji_count(source_entities)
-    async with SessionFactory() as session:
-        template = await owned_template(session, data["template_id"], message.from_user.id)
-        if template is None:
-            await state.clear()
-            await message.answer("Plantilla no encontrada.", reply_markup=templates_menu())
-            return
-        template.source_chat_id = message.chat.id
-        template.source_message_id = message.message_id
-        template.source_content_type = publication_content_type(message)
-        template.source_text_html = publication_text_html(message)
-        template.source_text_plain = source_text_plain
-        template.source_entities_json = serialize_entities(source_entities)
-        template.preview = (message.text or message.caption or "Contenido multimedia")[:500]
-        recurrent_count = await sync_recurrent_publications(session, template)
-        await session.commit()
-        template_id = template.id
-        button_count = len(template.buttons)
-        delete_after_minutes = template.delete_after_minutes
+    try:
+        async with SessionFactory() as session:
+            template = await owned_template(session, data["template_id"], message.from_user.id)
+            if template is None:
+                await state.clear()
+                await message.answer("Plantilla no encontrada.", reply_markup=templates_menu())
+                return
+            template.source_chat_id = message.chat.id
+            template.source_message_id = message.message_id
+            template.source_content_type = publication_content_type(message)
+            template.source_text_html = publication_text_html(message)
+            template.source_text_plain = source_text_plain
+            template.source_entities_json = serialize_entities(source_entities)
+            template.preview = (message.text or message.caption or "Contenido multimedia")[:500]
+            recurrent_count = await sync_recurrent_publications(session, template)
+            await session.commit()
+            template_id = template.id
+            button_count = len(template.buttons)
+            delete_after_minutes = template.delete_after_minutes
+    except SQLAlchemyError:
+        logger.exception("Could not update template content for user %s", message.from_user.id)
+        await state.clear()
+        await message.answer(
+            "⚠️ No pude guardar la descripción porque la base de datos aún no tiene la "
+            "migración de esta versión. Ejecuta en el VPS:\n\n"
+            "<code>docker compose run --rm migrate alembic upgrade head</code>\n\n"
+            "Después vuelve a enviar el contenido.",
+            reply_markup=templates_menu(),
+        )
+        return
     await state.clear()
     premium_notice = (
         f"\n✨ Detectamos <b>{premium_count}</b> emoji{'s' if premium_count != 1 else ''} premium."

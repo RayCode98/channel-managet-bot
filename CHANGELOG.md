@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## 0.16.1
+
+- Corrige la pantalla sin respuesta del Plan de contenido cuando la base de datos todavía no tiene
+  la migración de plantillas de v0.16.0.
+- Muestra una instrucción clara para ejecutar `alembic upgrade head` y ofrece reintentar desde Telegram.
+- Corrige el flujo de edición de descripción para informar el error y liberar el estado de conversación
+  en lugar de dejar al usuario esperando.
+- No agrega una migración nueva; la revisión requerida continúa siendo `20261026_0016`.
+
 ## 0.16.0
 
 - Permite editar el nombre y la descripción/contenido de una plantilla desde Telegram.

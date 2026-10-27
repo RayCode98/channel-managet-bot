@@ -1,3 +1,4 @@
+import logging
 import math
 import uuid
 from collections import defaultdict
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..database import SessionFactory
 from ..keyboards import recurrence_label, ttl_label
@@ -15,48 +17,75 @@ from ..repository import get_workspace
 
 router = Router(name="content_plan")
 PAGE_SIZE = 8
+logger = logging.getLogger(__name__)
+
+
+def plan_retry_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Reintentar", callback_data="plan:page:0")],
+            [InlineKeyboardButton(text="⬅️ Menú principal", callback_data="home")],
+        ]
+    )
 
 
 async def render_plan(callback: CallbackQuery, page: int) -> None:
-    async with SessionFactory() as session:
-        workspace = await get_workspace(session, callback.from_user.id)
-        total = (
-            await session.scalar(
-                select(func.count())
-                .select_from(Publication)
-                .where(
-                    Publication.workspace_id == workspace.id,
-                    Publication.status == PublicationStatus.scheduled,
-                    Publication.scheduled_at.is_not(None),
+    try:
+        async with SessionFactory() as session:
+            workspace = await get_workspace(session, callback.from_user.id)
+            if workspace is None:
+                await callback.message.edit_text(
+                    "No encuentro tu espacio de trabajo. Envía /start para inicializarlo.",
+                    reply_markup=plan_retry_menu(),
                 )
-            )
-            or 0
-        )
-        total_pages = max(1, math.ceil(total / PAGE_SIZE))
-        page = min(max(page, 0), total_pages - 1)
-        publications = list(
-            await session.scalars(
-                select(Publication)
-                .where(
-                    Publication.workspace_id == workspace.id,
-                    Publication.status == PublicationStatus.scheduled,
-                    Publication.scheduled_at.is_not(None),
-                )
-                .order_by(Publication.scheduled_at)
-                .offset(page * PAGE_SIZE)
-                .limit(PAGE_SIZE)
-            )
-        )
-        channel_counts = {}
-        for publication in publications:
-            channel_counts[publication.id] = (
+                return
+            total = (
                 await session.scalar(
                     select(func.count())
-                    .select_from(PublicationChannel)
-                    .where(PublicationChannel.publication_id == publication.id)
+                    .select_from(Publication)
+                    .where(
+                        Publication.workspace_id == workspace.id,
+                        Publication.status == PublicationStatus.scheduled,
+                        Publication.scheduled_at.is_not(None),
+                    )
                 )
                 or 0
             )
+            total_pages = max(1, math.ceil(total / PAGE_SIZE))
+            page = min(max(page, 0), total_pages - 1)
+            publications = list(
+                await session.scalars(
+                    select(Publication)
+                    .where(
+                        Publication.workspace_id == workspace.id,
+                        Publication.status == PublicationStatus.scheduled,
+                        Publication.scheduled_at.is_not(None),
+                    )
+                    .order_by(Publication.scheduled_at)
+                    .offset(page * PAGE_SIZE)
+                    .limit(PAGE_SIZE)
+                )
+            )
+            channel_counts = {}
+            for publication in publications:
+                channel_counts[publication.id] = (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(PublicationChannel)
+                        .where(PublicationChannel.publication_id == publication.id)
+                    )
+                    or 0
+                )
+    except SQLAlchemyError:
+        logger.exception("Could not load content plan for user %s", callback.from_user.id)
+        await callback.message.edit_text(
+            "⚠️ No pude cargar el Plan de contenido porque la base de datos aún no tiene la "
+            "migración de esta versión. Ejecuta en el VPS:\n\n"
+            "<code>docker compose run --rm migrate alembic upgrade head</code>\n\n"
+            "Después pulsa Reintentar.",
+            reply_markup=plan_retry_menu(),
+        )
+        return
 
     grouped = defaultdict(list)
     timezone = ZoneInfo(workspace.timezone)

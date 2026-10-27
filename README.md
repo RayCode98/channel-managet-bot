@@ -41,6 +41,7 @@ Bot multiempresa escrito en Python para que distintos clientes administren sus c
 - Plan de contenido paginado y agrupado por fecha, con eliminación masiva segura de las programadas.
 - Plantillas reutilizables con contenido, botones con color y autoeliminación, incluida eliminación masiva.
 - Edición individual del nombre, descripción y botones de una plantilla, con propagación a sus recurrencias futuras.
+- Mensajes de diagnóstico y reintento cuando una migración de base de datos está pendiente, evitando pantallas sin respuesta.
 - Vista previa exacta de plantillas antes de utilizarlas.
 - Eliminación individual de botones en bienvenidas, despedidas, plantillas y publicaciones en preparación.
 - Opción **Agregar botón** dentro de la administración de bienvenidas y despedidas para anexar uno nuevo sin reconfigurar los existentes.
@@ -124,7 +125,7 @@ El permiso para eliminar mensajes es necesario cuando se utilice la autoeliminac
 
 Consulta [`UPGRADE_V0.2.0.md`](UPGRADE_V0.2.0.md). La actualización conserva el `.env`, los volúmenes y los datos existentes, y aplica la migración `20260902_0002`.
 
-Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.15.2, sigue [`UPGRADE_V0.16.0.md`](UPGRADE_V0.16.0.md). Esta actualización agrega la migración `20261026_0016_template_edit_propagation` y conserva los datos existentes.
+Para instalar la entrega más reciente sobre cualquier versión entre v0.2.x y v0.16.0, sigue [`UPGRADE_V0.16.1.md`](UPGRADE_V0.16.1.md). La migración `20261026_0016_template_edit_propagation` debe quedar aplicada y los datos existentes se conservan.
 
 En v0.13.0, la conexión recomendada es **Canales y grupos → Agregar canal o grupo**:
 Telegram muestra un selector nativo para elegir exactamente el chat. Después de
